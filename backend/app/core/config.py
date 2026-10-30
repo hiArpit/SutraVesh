@@ -1,4 +1,4 @@
-from pydantic_settings import BaseSettings
+from pydantic_settings import BaseSettings, SettingsConfigDict
 from typing import Optional
 
 
@@ -15,9 +15,7 @@ class Settings(BaseSettings):
     # Wikipedia API
     WIKIPEDIA_USER_AGENT: str = "WonderLensHackathon/1.0 (contact: team@sutravesh.local)"
 
-    class Config:
-        env_file = ".env"
-        extra = "allow"
+    model_config = SettingsConfigDict(env_file=".env", extra="allow")
 
 
 settings = Settings()
