@@ -15,6 +15,58 @@ export default function ModeSelector({ onStart, onCaptureImage, loading = false,
   const [isJourneyModalOpen, setIsJourneyModalOpen] = useState(false)
   const [isOpenCustomModal, setIsOpenCustomModal] = useState(false)
   const [isRulesModalOpen, setIsRulesModalOpen] = useState(false)
+
+  const openJourneyModal = () => {
+    window.history.pushState({ modal: 'ladder' }, '', '#quest-ladder')
+    setIsJourneyModalOpen(true)
+  }
+  const closeJourneyModal = () => {
+    if (window.location.hash === '#quest-ladder') {
+      window.history.back()
+    }
+    setIsJourneyModalOpen(false)
+  }
+
+  const openRulesModal = () => {
+    window.history.pushState({ modal: 'rules' }, '', '#rules')
+    setIsRulesModalOpen(true)
+  }
+  const closeRulesModal = () => {
+    if (window.location.hash === '#rules') {
+      window.history.back()
+    }
+    setIsRulesModalOpen(false)
+  }
+
+  const openCustomModal = () => {
+    window.history.pushState({ modal: 'custom' }, '', '#custom-seed')
+    openCustomModal()
+  }
+  const closeCustomModal = () => {
+    if (window.location.hash === '#custom-seed') {
+      window.history.back()
+    }
+    setIsOpenCustomModal(false)
+  }
+
+  // Handle browser back button (popstate) to close modals instead of exiting page
+  useEffect(() => {
+    const handlePopState = () => {
+      const hash = window.location.hash
+      if (!hash || hash === '#home') {
+        setIsJourneyModalOpen(false)
+        setIsRulesModalOpen(false)
+        setIsOpenCustomModal(false)
+      } else {
+        if (hash !== '#quest-ladder') setIsJourneyModalOpen(false)
+        if (hash !== '#rules') setIsRulesModalOpen(false)
+        if (hash !== '#custom-seed') setIsOpenCustomModal(false)
+      }
+    }
+    window.addEventListener('popstate', handlePopState)
+    return () => window.removeEventListener('popstate', handlePopState)
+  }, [])
+
   const [seedInput, setSeedInput] = useState('')
   const [targetInput, setTargetInput] = useState('')
   const [hasTarget, setHasTarget] = useState(false)
@@ -150,7 +202,7 @@ export default function ModeSelector({ onStart, onCaptureImage, loading = false,
     <div className="min-h-screen bg-[#FAF6EE] text-slate-800 flex flex-col items-center justify-start py-8 px-4 sm:px-6 relative">
       {/* Top Brand Pill Header */}
       <div className="w-full max-w-5xl flex items-center justify-between mb-6">
-        <div className="flex items-center gap-2.5">
+        <div onClick={() => { window.scrollTo({ top: 0, behavior: 'smooth' }); if (window.location.hash !== '#home') window.history.pushState({ screen: 'home' }, '', '#home'); }} className="flex items-center gap-2.5 cursor-pointer hover:opacity-85 transition-opacity" title="SutraVesh Home">
           <div className="w-10 h-10 rounded-2xl bg-orange-500 text-white flex items-center justify-center font-black text-xl shadow-md">
             🔍
           </div>
@@ -167,7 +219,7 @@ export default function ModeSelector({ onStart, onCaptureImage, loading = false,
         {/* Guest explorer badge & connection rule button */}
         <div className="flex items-center gap-2">
           <button
-            onClick={() => setIsRulesModalOpen(true)}
+            onClick={openRulesModal}
             className="px-3 py-1.5 bg-white border border-orange-200 hover:border-orange-400 rounded-full text-xs font-bold text-slate-700 shadow-sm transition-all cursor-pointer flex items-center gap-1.5"
             title="Learn how wonders connect"
           >
@@ -371,7 +423,7 @@ export default function ModeSelector({ onStart, onCaptureImage, loading = false,
           <div className="space-y-2.5">
             <button
               type="button"
-              onClick={() => setIsJourneyModalOpen(true)}
+              onClick={openJourneyModal}
               className="w-full py-3.5 px-6 bg-orange-500 hover:bg-orange-600 active:translate-y-0.5 text-white font-black text-sm rounded-2xl shadow-lg border-b-4 border-orange-700 active:border-b-0 transition-all cursor-pointer flex items-center justify-center gap-2"
             >
               <span>Play Quest Ladder (Levels 1–15)</span>
@@ -398,7 +450,7 @@ export default function ModeSelector({ onStart, onCaptureImage, loading = false,
       {/* 15-LEVEL QUEST JOURNEY MODAL */}
       <QuestJourneyModal
         isOpen={isJourneyModalOpen}
-        onClose={() => setIsJourneyModalOpen(false)}
+        onClose={closeJourneyModal}
         onSelectLevel={handleSelectLevel}
         currentUser={currentUser}
       />
@@ -415,7 +467,7 @@ export default function ModeSelector({ onStart, onCaptureImage, loading = false,
             >
               <button
                 type="button"
-                onClick={() => setIsRulesModalOpen(false)}
+                onClick={closeRulesModal}
                 className="absolute top-4 right-4 text-slate-400 hover:text-slate-800 p-1.5 rounded-full cursor-pointer hover:bg-slate-100 transition-colors"
               >
                 <X size={18} />
@@ -454,7 +506,7 @@ export default function ModeSelector({ onStart, onCaptureImage, loading = false,
 
               <button
                 type="button"
-                onClick={() => setIsRulesModalOpen(false)}
+                onClick={closeRulesModal}
                 className="w-full py-3 bg-orange-500 hover:bg-orange-600 text-white font-black text-xs rounded-2xl shadow transition-colors cursor-pointer"
               >
                 Got it! Let's explore
@@ -476,7 +528,7 @@ export default function ModeSelector({ onStart, onCaptureImage, loading = false,
             >
               <button
                 type="button"
-                onClick={() => setIsOpenCustomModal(false)}
+                onClick={closeCustomModal}
                 className="absolute top-4 right-4 text-slate-400 hover:text-slate-800 p-1.5 rounded-full cursor-pointer hover:bg-slate-100 transition-colors"
               >
                 <X size={18} />

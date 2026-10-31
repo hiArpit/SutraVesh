@@ -110,6 +110,7 @@ export function useGameSession(currentUser?: UserProfile | null) {
     setLoading(true)
     try {
       const res = await createSession(m, seed, target)
+      window.history.pushState({ screen: 'map' }, '', '#map')
       setSessionId(res.session_id)
       setMode(m)
       setQuestTarget(target)
@@ -171,6 +172,7 @@ export function useGameSession(currentUser?: UserProfile | null) {
 
       // Open kid discovery card
       setLastCardResponse(res)
+      window.history.pushState({ modal: 'card' }, '', '#card')
       setIsCardModalOpen(true)
     }
 
@@ -230,6 +232,7 @@ export function useGameSession(currentUser?: UserProfile | null) {
     setLoading(true)
     try {
       const res = await createSession('world', 'Wonder', undefined)
+      window.history.pushState({ screen: 'map' }, '', '#map')
       setSessionId(res.session_id)
       setMode('world')
       setQuestTarget(undefined)
@@ -274,6 +277,7 @@ export function useGameSession(currentUser?: UserProfile | null) {
       setTotalPoints(hopRes.total_points)
       setHopsCount(1)
       setLastCardResponse(hopRes)
+      window.history.pushState({ modal: 'card' }, '', '#card')
       setIsCardModalOpen(true)
     } finally {
       setLoading(false)
