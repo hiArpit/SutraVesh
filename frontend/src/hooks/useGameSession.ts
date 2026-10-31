@@ -57,6 +57,9 @@ export function useGameSession() {
 
   const [loading, setLoading] = useState(false)
   const [totalPoints, setTotalPoints] = useState(0)
+  const [cumulativePoints, setCumulativePoints] = useState<number>(() => {
+    return Number(localStorage.getItem('sutravesh_total_explorer_points') || '0')
+  })
   const [hopsCount, setHopsCount] = useState(0)
   const [badges, setBadges] = useState<string[]>([])
   const [lastVerdict, setLastVerdict] = useState<HopVerdict | null>(null)
@@ -107,6 +110,13 @@ export function useGameSession() {
     setLastReason(res.reason)
     setLastPoints(res.points_awarded)
     setTotalPoints(res.total_points)
+    if (res.points_awarded > 0) {
+      setCumulativePoints(prev => {
+        const nextPoints = prev + res.points_awarded
+        localStorage.setItem('sutravesh_total_explorer_points', String(nextPoints))
+        return nextPoints
+      })
+    }
     setHopsCount(h => h + (res.valid ? 1 : 0))
     setBadges(prev => {
       const next = [...prev]
@@ -280,7 +290,7 @@ export function useGameSession() {
     loading, totalPoints, hopsCount, badges,
     lastVerdict, lastReason, lastPoints,
     completed, eurekaGraph,
-    lastCardResponse, isCardModalOpen, setIsCardModalOpen,
+    cumulativePoints, lastCardResponse, isCardModalOpen, setIsCardModalOpen,
     startSession, startSessionWithImage, handleTextHop, handleImageHop, reset,
   }
 }
