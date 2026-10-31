@@ -7,7 +7,7 @@ GET  /api/session/{session_id} — get current session state
 POST /api/discover  — discover related concepts for a seed node
 """
 
-from fastapi import APIRouter, HTTPException, UploadFile, File, Form
+from fastapi import APIRouter, HTTPException, UploadFile, File, Form, Depends
 from typing import Optional
 from pydantic import BaseModel
 
@@ -17,6 +17,7 @@ from app.core.session import create_session, get_session
 from app.services.hop_engine import process_hop
 from app.services.wiki_service import fetch_wiki_summary
 from app.services.groq_service import evaluate_hop
+from app.core.auth import get_current_user
 
 router = APIRouter(prefix="/api", tags=["game"])
 
@@ -93,12 +94,16 @@ async def get_session_state(session_id: str):
 # POST /api/hop — Submit a text hop
 # ---------------------------------------------------------------------------
 @router.post("/hop", response_model=HopResponse)
-async def submit_hop(request: HopRequest):
+async def submit_hop(
+    request: HopRequest,
+    current_user: Optional[dict] = Depends(get_current_user),
+):
     """
     Submit a text-based hop. The kid types their connection explanation.
     The engine runs guardrails → Wikipedia grounding → Groq verdict → scoring.
     """
-    return await process_hop(request)
+    username = current_user.get("username") if current_user else None
+    return await process_hop(request, username=username)
 
 
 # ---------------------------------------------------------------------------
@@ -112,6 +117,7 @@ async def submit_image_hop(
     source_node_id: Optional[str] = Form(None),
     target_node_id: Optional[str] = Form(None),
     image: UploadFile = File(...),
+    current_user: Optional[dict] = Depends(get_current_user),
 ):
     """
     Submit an image hop. The kid snaps a photo; Groq Vision identifies
@@ -119,6 +125,7 @@ async def submit_image_hop(
     """
     image_bytes = await image.read()
     mime_type = image.content_type or "image/jpeg"
+    username = current_user.get("username") if current_user else None
 
     request = HopRequest(
         session_id=session_id,
@@ -127,7 +134,7 @@ async def submit_image_hop(
         target_node_id=target_node_id,
         explanation=explanation,
     )
-    return await process_hop(request, image_bytes=image_bytes, mime_type=mime_type)
+    return await process_hop(request, image_bytes=image_bytes, mime_type=mime_type, username=username)
 
 
 # ---------------------------------------------------------------------------
