@@ -1,6 +1,7 @@
 import { ReactFlow, Background, Controls, MiniMap, BackgroundVariant } from '@xyflow/react'
 import '@xyflow/react/dist/style.css'
 import { AnimatePresence } from 'framer-motion'
+import { useState, useEffect } from 'react'
 
 import { useGameSession } from './hooks/useGameSession'
 import ModeSelector from './components/ModeSelector'
@@ -8,10 +9,25 @@ import HopInput from './components/HopInput'
 import ScorePanel from './components/ScorePanel'
 import EurekaCard from './components/EurekaCard'
 import BubbleNode from './components/BubbleNode'
+import AuthModal from './components/AuthModal'
+import { getMeApi, logoutApi } from './api/client'
 
 const NODE_TYPES = { bubble: BubbleNode }
 
 export default function App() {
+  const [currentUser, setCurrentUser] = useState<{ username: string; display_name: string } | null>(null)
+
+  useEffect(() => {
+    getMeApi().then(user => {
+      if (user) setCurrentUser(user)
+    })
+  }, [])
+
+  const handleLogout = () => {
+    logoutApi()
+    setCurrentUser(null)
+  }
+
   const {
     sessionId, mode, questTarget, currentNode,
     nodes, edges, onNodesChange, onEdgesChange,
@@ -23,12 +39,23 @@ export default function App() {
 
   // ── Landing screen ──────────────────────────────────────────────────────────
   if (!sessionId) {
-    return <ModeSelector onStart={startSession} />
+    return (
+      <div className="relative">
+        <div className="absolute top-4 right-4 z-40">
+          <AuthModal user={currentUser} onAuthChange={setCurrentUser} onLogout={handleLogout} />
+        </div>
+        <ModeSelector onStart={startSession} />
+      </div>
+    )
   }
 
   // ── Game screen ─────────────────────────────────────────────────────────────
   return (
     <div className="flex h-screen bg-slate-950 overflow-hidden">
+      {/* Top right auth widget */}
+      <div className="absolute top-4 right-76 z-30">
+        <AuthModal user={currentUser} onAuthChange={setCurrentUser} onLogout={handleLogout} />
+      </div>
 
       {/* LEFT: Graph canvas */}
       <div className="flex-1 relative">
@@ -81,7 +108,7 @@ export default function App() {
           </div>
           <button
             onClick={reset}
-            className="text-xs text-slate-500 hover:text-red-400 transition-colors"
+            className="text-xs text-slate-500 hover:text-rose-400 transition-colors cursor-pointer"
           >
             ✕ Exit
           </button>
