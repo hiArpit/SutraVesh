@@ -226,15 +226,15 @@ export function useGameSession() {
     }
   }, [setNodes, setEdges])
 
-  // ── Text hop: concept + explanation ─────────────────────────────────────────
-  const handleTextHop = useCallback(async (concept: string, explanation: string) => {
+  // ── Text hop: concept (AI automatically answers why they connect) ───────────
+  const handleTextHop = useCallback(async (concept: string, explanation?: string) => {
     if (!sessionId) return
     setLoading(true)
     try {
       const res = await submitHop(
         sessionId,
         mode,
-        explanation,
+        explanation || `Discovered ${concept} in the surrounding world.`,
         currentNode,
         concept.toLowerCase().replace(/ /g, '_')
       )
