@@ -33,6 +33,7 @@ async def process_hop(
     request: HopRequest,
     image_bytes: Optional[bytes] = None,
     mime_type: str = "image/jpeg",
+    username: Optional[str] = None,
 ) -> HopResponse:
     session = get_session(request.session_id)
     if not session:
@@ -227,6 +228,18 @@ async def process_hop(
         session.nodes.append(new_node)
         session.edges.extend(new_edges)
         session.current_node_id = node_id
+
+        if username and new_node:
+            try:
+                from app.core.auth import save_user_discovery
+                await save_user_discovery(
+                    username=username,
+                    node=new_node.model_dump(),
+                    edges=[e.model_dump() for e in new_edges],
+                    mode=request.mode,
+                )
+            except Exception:
+                pass
 
     # 7. Badges
     new_badges = _evaluate_badges(session, verdict, resonance_count, request.mode)

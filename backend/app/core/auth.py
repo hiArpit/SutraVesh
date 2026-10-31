@@ -9,6 +9,7 @@ with local users.json as automatic fault-tolerant backup.
 import os
 import json
 import uuid
+import math
 from datetime import datetime, timedelta, timezone
 from typing import Optional, List, Dict, Any
 import jwt
@@ -333,14 +334,107 @@ async def save_user_map(username: str, nodes: list, edges: list) -> dict:
     }
 
 
-async def record_user_discovery(username: str, discovery_item: dict) -> None:
+async def save_user_discovery(username: str, node: dict, edges: list, mode: str = "world") -> None:
+    """
+    Saves an object (node) and its respective relationships (edges) directly
+    to the user's permanent document in MongoDB.
+    """
     username_clean = username.strip().lower()
     try:
         db = get_database()
-        if db is not None:
-            await db.users.update_one(
-                {"username": username_clean},
-                {"$push": {"captured_objects": discovery_item}}
-            )
-    except Exception:
+        if db is None:
+            return
+
+        user_doc = await db.users.find_one({"username": username_clean})
+        if not user_doc:
+            return
+
+        saved_nodes = user_doc.get("saved_nodes", [])
+        saved_edges = user_doc.get("saved_edges", [])
+
+        node_id = node.get("id")
+        # Format as React Flow Node if raw Pydantic Node
+        if "position" not in node:
+            idx = len(saved_nodes)
+            angle = (idx * 2 * math.pi) / 6
+            radius = 180 + (idx // 6) * 90
+            flow_node = {
+                "id": node_id,
+                "type": "bubble",
+                "position": {
+                    "x": 400 + radius * math.cos(angle),
+                    "y": 300 + radius * math.sin(angle),
+                },
+                "data": {
+                    "label": node.get("label"),
+                    "category": node.get("category"),
+                    "description": node.get("description"),
+                    "what_is_it": node.get("what_is_it"),
+                    "fun_fact": node.get("fun_fact"),
+                    "try_this": node.get("try_this"),
+                    "grade_level": node.get("grade_level"),
+                    "image_url": node.get("image_url"),
+                },
+            }
+        else:
+            flow_node = node
+
+        # Append node if not already present
+        if not any(n.get("id") == node_id for n in saved_nodes):
+            saved_nodes.append(flow_node)
+
+        # Format and append respective relationships (edges)
+        for e in edges:
+            source = e.get("source")
+            target = e.get("target")
+            if source and target and not any(existing.get("source") == source and existing.get("target") == target for existing in saved_edges):
+                flow_edge = {
+                    "id": f"{source}-{target}",
+                    "source": source,
+                    "target": target,
+                    "label": (e.get("relationship") or "")[:36],
+                    "relationship": e.get("relationship", ""),
+                    "connection_rule": e.get("connection_rule"),
+                    "support": e.get("support", "association"),
+                    "type": "smoothstep",
+                    "animated": True,
+                }
+                saved_edges.append(flow_edge)
+
+        # Update in MongoDB
+        await db.users.update_one(
+            {"username": username_clean},
+            {
+                "$set": {
+                    "saved_nodes": saved_nodes,
+                    "saved_edges": saved_edges,
+                },
+                "$push": {
+                    "captured_objects": {
+                        "object_id": node_id,
+                        "label": node.get("label"),
+                        "category": node.get("category"),
+                        "mode": mode,
+                        "relationships": [
+                            {
+                                "source": ed.get("source"),
+                                "target": ed.get("target"),
+                                "rule": ed.get("connection_rule"),
+                                "relationship": ed.get("relationship"),
+                            }
+                            for ed in edges
+                        ],
+                        "timestamp": datetime.now(timezone.utc).isoformat(),
+                    }
+                }
+            }
+        )
+
+        # Also backup to users.json
+        users = _load_users_file()
+        if username_clean in users:
+            users[username_clean]["saved_nodes"] = saved_nodes
+            users[username_clean]["saved_edges"] = saved_edges
+            _save_users_file(users)
+    except Exception as err:
         pass
