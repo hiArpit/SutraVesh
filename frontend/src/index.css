@@ -1,0 +1,31 @@
+@import "tailwindcss";
+
+@layer base {
+  body {
+    @apply bg-slate-950 text-white font-sans;
+  }
+}
+
+/* ReactFlow base */
+.react-flow__node {
+  border-radius: 12px;
+}
+
+/* Bubble node glow animations */
+@keyframes pulse-glow {
+  0%, 100% { box-shadow: 0 0 8px rgba(139, 92, 246, 0.4); }
+  50%       { box-shadow: 0 0 24px rgba(139, 92, 246, 0.9); }
+}
+
+@keyframes float {
+  0%, 100% { transform: translateY(0px); }
+  50%       { transform: translateY(-6px); }
+}
+
+.node-bubble {
+  animation: float 3s ease-in-out infinite, pulse-glow 2s ease-in-out infinite;
+}
+
+.node-established { border-color: #22d3ee; }   /* cyan  */
+.node-association  { border-color: #a78bfa; }   /* violet */
+.node-resonance    { border-color: #fb923c; }   /* orange */
