@@ -8,14 +8,21 @@ from app.core.guardrails import check_input, sanitize_label
     ("black hole", True),
     ("volcano eruption", True),
     ("robot", True),
-    ("kill people", False),
-    ("bomb", False),
-    ("sex", False),
-    ("porn", False),
-    ("9876543210", False),       # phone number
-    ("test@email.com", False),   # email
-    ("", False),                 # empty
-    ("A" * 301, False),          # too long
+    ("kitchen knife", True),            # Educational / innocent usage of knife
+    ("bamboo shoot", True),             # Innocent plant biology usage of shoot
+    ("heart attack", True),             # Innocent medical / biological term
+    ("supernova explosion", True),      # Innocent space science term
+    ("knife attack", False),            # Violent context
+    ("shoot people", False),            # Violent context
+    ("gun", False),                     # Weapon
+    ("kill people", False),             # Severe violence
+    ("bomb", False),                    # Severe violence
+    ("sex", False),                     # Adult
+    ("porn", False),                    # Adult
+    ("9876543210", False),              # Phone number
+    ("test@email.com", False),          # Email
+    ("", False),                        # Empty
+    ("A" * 301, False),                 # Too long
 ])
 def test_check_input(text, expected_safe):
     safe, reason = check_input(text)

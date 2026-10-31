@@ -31,7 +31,7 @@ def safe_str(s: str) -> str:
 
 async def run_benchmark():
     print("=" * 70)
-    print("SutraVesh (WonderLens) - AI Agent Evaluation Benchmark Harness")
+    print("SutraVesh - AI Agent Evaluation Benchmark Harness")
     print("=" * 70)
 
     test_cases = [

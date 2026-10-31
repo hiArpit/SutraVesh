@@ -23,7 +23,7 @@ const CLUE_CHIPS = [
 ]
 
 export default function HopInput({
-  onTextHop, onImageHop, loading, disabled, currentNode, targetNode, mode,
+  onTextHop, onImageHop, loading, disabled, currentNode, targetNode, mode: _mode,
 }: Props) {
   const [concept, setConcept] = useState('')
   const [explanation, setExplanation] = useState('')
@@ -65,22 +65,22 @@ export default function HopInput({
 
   return (
     <motion.div
-      initial={{ y: 40, opacity: 0 }}
+      initial={{ y: 30, opacity: 0 }}
       animate={{ y: 0, opacity: 1 }}
       className="w-full max-w-2xl mx-auto flex flex-col items-center"
     >
       {/* Context banner */}
-      <div className="flex items-center gap-2 mb-2 px-3 py-1 bg-slate-900/90 rounded-full border border-slate-700 text-xs text-slate-300 shadow-md">
-        <span>📍 Current: <b className="text-violet-400 capitalize">{currentNode}</b></span>
-        {mode === 'quest' && targetNode && (
+      <div className="flex items-center gap-2 mb-2 px-4 py-1.5 bg-white/95 backdrop-blur-md rounded-full border-2 border-orange-100 text-xs font-bold text-slate-700 shadow-sm">
+        <span>📍 Current: <b className="text-orange-600 capitalize">{currentNode}</b></span>
+        {targetNode && (
           <>
-            <span className="text-slate-500">→</span>
-            <span>🎯 Target: <b className="text-emerald-400 capitalize">{targetNode}</b></span>
+            <span className="text-slate-400">→</span>
+            <span>🎯 Goal: <b className="text-emerald-600 capitalize">{targetNode}</b></span>
           </>
         )}
       </div>
 
-      {/* Quick Clue Chips (when typing) */}
+      {/* Quick Clue Chips */}
       {!imageFile && (
         <div className="flex flex-wrap gap-1.5 justify-center mb-2">
           {CLUE_CHIPS.map(chip => (
@@ -88,7 +88,7 @@ export default function HopInput({
               key={chip}
               type="button"
               onClick={() => setExplanation(prev => (prev ? `${prev} · ${chip}` : chip))}
-              className="text-[11px] bg-slate-800/80 hover:bg-violet-900/60 border border-slate-700 hover:border-violet-500 text-slate-300 px-2.5 py-0.5 rounded-full transition-all cursor-pointer"
+              className="text-[11px] font-bold bg-white hover:bg-orange-50 border border-orange-200 text-slate-700 hover:text-orange-600 px-3 py-1 rounded-full transition-all cursor-pointer shadow-2xs"
             >
               {chip}
             </button>
@@ -100,24 +100,24 @@ export default function HopInput({
       <AnimatePresence>
         {imagePreview && (
           <motion.div
-            initial={{ opacity: 0, scale: 0.8 }}
+            initial={{ opacity: 0, scale: 0.9 }}
             animate={{ opacity: 1, scale: 1 }}
-            exit={{ opacity: 0, scale: 0.8 }}
-            className="flex items-center gap-3 bg-violet-950/80 border border-violet-500/60 rounded-2xl p-2.5 mb-2 shadow-xl"
+            exit={{ opacity: 0, scale: 0.9 }}
+            className="flex items-center gap-3 bg-white border-2 border-orange-200 rounded-2xl p-2.5 mb-2 shadow-lg"
           >
             <img
               src={imagePreview}
               alt="preview"
-              className="h-14 w-14 rounded-xl object-cover border border-violet-400 shadow-md"
+              className="h-14 w-14 rounded-xl object-cover border-2 border-orange-300 shadow-sm"
             />
             <div className="text-xs text-left">
-              <p className="font-bold text-violet-200">Photo Ready for AI Discovery!</p>
-              <p className="text-[11px] text-slate-400">Click &quot;DISCOVER NOW&quot; below or add an optional note</p>
+              <p className="font-black text-slate-900">Photo Ready for AI Discovery!</p>
+              <p className="text-[11px] text-slate-500 font-medium">Click &quot;DISCOVER NOW&quot; below or add an optional note</p>
             </div>
             <button
               type="button"
               onClick={clearImage}
-              className="ml-auto bg-rose-500/80 hover:bg-rose-500 text-white rounded-full p-1 cursor-pointer transition-colors"
+              className="ml-auto bg-rose-500 hover:bg-rose-600 text-white rounded-full p-1 cursor-pointer transition-colors shadow-xs"
             >
               <X size={14} />
             </button>
@@ -125,18 +125,18 @@ export default function HopInput({
         )}
       </AnimatePresence>
 
-      {/* Main interactive bar */}
-      <div className="w-full bg-slate-900/95 backdrop-blur-md rounded-2xl border-2 border-slate-700 focus-within:border-violet-500 shadow-2xl p-2.5 flex items-center gap-2 transition-all">
+      {/* Main interactive bar (Warm Theme) */}
+      <div className="w-full bg-white rounded-3xl border-2 border-orange-200 focus-within:border-orange-500 shadow-xl p-2.5 flex items-center gap-2.5 transition-all">
         {/* Camera Live Viewfinder Trigger */}
         <button
           type="button"
           onClick={() => setIsCameraOpen(true)}
           disabled={disabled}
-          className="p-2.5 rounded-xl bg-violet-600/30 hover:bg-violet-600 transition-colors text-violet-300 hover:text-white cursor-pointer disabled:opacity-40 flex items-center gap-1.5"
+          className="px-3.5 py-2.5 rounded-2xl bg-orange-50 hover:bg-orange-100 text-orange-600 font-black text-xs transition-colors cursor-pointer disabled:opacity-40 flex items-center gap-1.5 border border-orange-200 shadow-2xs"
           title="Open live camera lens"
         >
-          <Camera size={19} />
-          <span className="text-[11px] font-bold hidden sm:inline">Camera</span>
+          <Camera size={18} />
+          <span className="hidden sm:inline">Camera</span>
         </button>
 
         {!imageFile ? (
@@ -147,7 +147,7 @@ export default function HopInput({
               onChange={e => setConcept(e.target.value)}
               onKeyDown={handleKey}
               placeholder="Hop to (e.g. Sunlight)..."
-              className="w-44 bg-slate-800 text-white placeholder-slate-400 text-xs font-semibold px-3 py-2 rounded-xl border border-slate-700 focus:outline-none focus:border-violet-400"
+              className="w-44 bg-[#FAF6EE] text-slate-900 placeholder-slate-400 text-xs font-bold px-3 py-2.5 rounded-2xl border border-orange-100 focus:outline-none focus:border-orange-500"
             />
             <input
               type="text"
@@ -155,7 +155,7 @@ export default function HopInput({
               onChange={e => setExplanation(e.target.value)}
               onKeyDown={handleKey}
               placeholder="Why does it connect? (e.g. Reflects light)"
-              className="flex-1 bg-transparent text-sm text-white placeholder-slate-400 px-2 outline-none"
+              className="flex-1 bg-transparent text-xs font-semibold text-slate-800 placeholder-slate-400 px-2 outline-none"
             />
           </>
         ) : (
@@ -165,7 +165,7 @@ export default function HopInput({
             onChange={e => setExplanation(e.target.value)}
             onKeyDown={handleKey}
             placeholder="Optional note about this photo (or just click Discover!)..."
-            className="flex-1 bg-transparent text-sm text-white placeholder-slate-400 px-2 outline-none"
+            className="flex-1 bg-transparent text-xs font-semibold text-slate-800 placeholder-slate-400 px-2 outline-none"
           />
         )}
 
@@ -174,13 +174,13 @@ export default function HopInput({
           type="button"
           onClick={handleSubmit}
           disabled={!canSubmit || loading || disabled}
-          className="px-4 py-2.5 bg-gradient-to-r from-violet-600 to-indigo-600 hover:from-violet-500 hover:to-indigo-500 text-white rounded-xl font-bold text-xs flex items-center gap-1.5 shadow-md active:scale-95 transition-all cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed"
+          className="px-5 py-3 bg-orange-500 hover:bg-orange-600 active:translate-y-0.5 text-white font-black text-xs rounded-2xl shadow-md border-b-4 border-orange-700 active:border-b-0 transition-all cursor-pointer flex items-center gap-1.5 disabled:opacity-40 disabled:cursor-not-allowed"
         >
           {loading ? (
             <Loader2 size={16} className="animate-spin" />
           ) : imageFile ? (
             <>
-              <Sparkles size={14} className="text-yellow-300" />
+              <Sparkles size={14} className="text-yellow-200" />
               <span>DISCOVER NOW!</span>
             </>
           ) : (

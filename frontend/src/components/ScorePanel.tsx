@@ -14,9 +14,9 @@ interface Props {
 }
 
 const VERDICT_STYLE: Record<HopVerdict, string> = {
-  established: 'bg-cyan-900 border-cyan-400 text-cyan-300',
-  association:  'bg-violet-900 border-violet-400 text-violet-300',
-  rejected:     'bg-red-900 border-red-400 text-red-300',
+  established: 'bg-emerald-50 border-emerald-300 text-emerald-900',
+  association:  'bg-amber-50 border-amber-300 text-amber-900',
+  rejected:     'bg-rose-50 border-rose-300 text-rose-900',
 }
 
 const VERDICT_EMOJI: Record<HopVerdict, string> = {
@@ -26,79 +26,90 @@ const VERDICT_EMOJI: Record<HopVerdict, string> = {
 }
 
 export default function ScorePanel({
-  totalPoints, hopsCount, badges, lastVerdict, lastReason, lastPoints, mode, questTarget,
+  totalPoints, hopsCount, badges, lastVerdict, lastReason, lastPoints, mode: _mode, questTarget,
 }: Props) {
   return (
-    <div className="flex flex-col gap-3 w-64">
+    <div className="flex flex-col gap-3.5 w-72">
       {/* Score card */}
-      <div className="bg-slate-800 rounded-2xl border border-slate-700 p-4">
-        <div className="flex items-center gap-2 mb-3">
-          <Star size={18} className="text-yellow-400" />
-          <span className="text-sm font-semibold text-slate-300">Score</span>
+      <div className="bg-white rounded-3xl border-2 border-orange-100 p-5 shadow-sm">
+        <div className="flex items-center gap-2 mb-2">
+          <Star size={18} className="text-amber-500 fill-amber-400" />
+          <span className="text-xs font-bold text-slate-500 uppercase tracking-wider">Discovery Points</span>
         </div>
-        <p className="text-4xl font-black text-white tabular-nums">{totalPoints}</p>
-        <p className="text-xs text-slate-500 mt-1">{hopsCount} hop{hopsCount !== 1 ? 's' : ''} made</p>
+        <p className="text-4xl font-black text-slate-900 tabular-nums">{totalPoints}</p>
+        <p className="text-xs font-semibold text-slate-400 mt-1">{hopsCount} wonder{hopsCount !== 1 ? 's' : ''} connected</p>
 
-        {mode === 'quest' && questTarget && (
-          <div className="mt-3 p-2 bg-slate-900 rounded-lg">
-            <p className="text-xs text-slate-400">Quest target</p>
-            <p className="text-sm font-bold text-violet-300">🎯 {questTarget}</p>
+        {questTarget && (
+          <div className="mt-3.5 p-3 bg-amber-50/70 border border-amber-200/60 rounded-2xl">
+            <p className="text-[10px] font-black uppercase tracking-wider text-amber-700">Trail Goal</p>
+            <p className="text-sm font-black text-slate-800 mt-0.5">🎯 {questTarget}</p>
           </div>
         )}
       </div>
 
-      {/* Last verdict feedback */}
+      {/* Last verdict feedback banner */}
       <AnimatePresence mode="wait">
         {lastVerdict && (
           <motion.div
-            key={lastReason}
-            initial={{ opacity: 0, x: 20 }}
-            animate={{ opacity: 1, x: 0 }}
-            exit={{ opacity: 0, x: -20 }}
-            className={`rounded-2xl border p-3 text-sm ${VERDICT_STYLE[lastVerdict]}`}
+            key={`${lastVerdict}-${hopsCount}-${lastPoints}`}
+            initial={{ opacity: 0, scale: 0.95, y: 10 }}
+            animate={{ opacity: 1, scale: 1, y: 0 }}
+            exit={{ opacity: 0, scale: 0.95 }}
+            className={`rounded-3xl border-2 p-4 text-sm shadow-sm ${VERDICT_STYLE[lastVerdict]}`}
           >
-            <div className="flex items-center gap-2 mb-1 font-bold">
-              <span>{VERDICT_EMOJI[lastVerdict]}</span>
-              <span className="capitalize">{lastVerdict}</span>
+            <div className="flex items-center gap-2 mb-1.5 font-black">
+              <span className="text-base">{VERDICT_EMOJI[lastVerdict]}</span>
+              <span className="capitalize text-xs tracking-tight">{lastVerdict}</span>
               {lastPoints !== undefined && lastPoints > 0 && (
-                <span className="ml-auto text-xs font-black">+{lastPoints}</span>
+                <span className="ml-auto text-[11px] font-black bg-white px-2 py-0.5 rounded-full border border-black/5 shadow-xs">
+                  +{lastPoints} pts
+                </span>
               )}
             </div>
-            <p className="text-xs leading-relaxed opacity-90">{lastReason}</p>
+            <p className="text-xs leading-relaxed font-medium">
+              {lastReason || (lastVerdict === 'rejected' ? 'This connection was not accepted. Try another idea!' : 'Great discovery! Wonder unlocked on canvas.')}
+            </p>
           </motion.div>
         )}
       </AnimatePresence>
 
       {/* Badges */}
       {badges.length > 0 && (
-        <div className="bg-slate-800 rounded-2xl border border-slate-700 p-4">
-          <div className="flex items-center gap-2 mb-2">
-            <Award size={16} className="text-yellow-400" />
-            <span className="text-xs font-semibold text-slate-300">Badges</span>
+        <div className="bg-white rounded-3xl border-2 border-orange-100 p-4 shadow-sm">
+          <div className="flex items-center gap-2 mb-2.5">
+            <Award size={16} className="text-orange-500" />
+            <span className="text-xs font-bold text-slate-600 uppercase tracking-wider">Badges Unlocked</span>
           </div>
-          <div className="flex flex-wrap gap-1">
+          <div className="flex flex-wrap gap-1.5">
             {badges.map(b => (
               <motion.span
                 key={b}
                 initial={{ scale: 0 }}
                 animate={{ scale: 1 }}
-                className="bg-yellow-500 text-yellow-950 text-xs font-bold px-2 py-0.5 rounded-full"
+                className="bg-orange-100 text-orange-800 border border-orange-200 text-xs font-bold px-2.5 py-1 rounded-full shadow-xs"
               >
-                {b}
+                🏅 {b}
               </motion.span>
             ))}
           </div>
         </div>
       )}
 
-      {/* Points legend */}
-      <div className="bg-slate-800 rounded-2xl border border-slate-700 p-3 text-xs text-slate-400 space-y-1">
-        <div className="flex justify-between"><span>⚡ Established</span><span className="text-cyan-400 font-bold">+50</span></div>
-        <div className="flex justify-between"><span>🔮 Association</span><span className="text-violet-400 font-bold">+30</span></div>
-        {mode === 'world' && (
-          <div className="flex justify-between"><span>🌀 Resonance (each)</span><span className="text-orange-400 font-bold">+15</span></div>
-        )}
-        <div className="flex justify-between"><span>❌ Rejected</span><span className="text-red-400 font-bold">+0</span></div>
+      {/* Points guide */}
+      <div className="bg-white rounded-3xl border-2 border-orange-100 p-4 text-xs font-semibold text-slate-500 space-y-2 shadow-xs">
+        <p className="text-[10px] font-black uppercase tracking-wider text-slate-400 mb-1">Scoring Guide</p>
+        <div className="flex justify-between items-center">
+          <span className="flex items-center gap-1.5">⚡ Established Link</span>
+          <span className="text-emerald-600 font-black bg-emerald-50 px-2 py-0.5 rounded-full">+50</span>
+        </div>
+        <div className="flex justify-between items-center">
+          <span className="flex items-center gap-1.5">🔮 Creative Link</span>
+          <span className="text-amber-600 font-black bg-amber-50 px-2 py-0.5 rounded-full">+30</span>
+        </div>
+        <div className="flex justify-between items-center">
+          <span className="flex items-center gap-1.5">🌀 Resonance Bonus</span>
+          <span className="text-orange-600 font-black bg-orange-50 px-2 py-0.5 rounded-full">+15</span>
+        </div>
       </div>
     </div>
   )

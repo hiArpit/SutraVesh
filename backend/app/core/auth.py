@@ -94,19 +94,19 @@ def register_user(username: str, password: str, display_name: Optional[str] = No
     _save_users_file(users)
 
     # Save to MongoDB asynchronously in background if available
-    db = get_database()
-    if db is not None:
-        import asyncio
-        try:
-            loop = asyncio.get_event_loop()
-            if loop.is_running():
-                asyncio.create_task(db["users"].update_one(
+    if is_mongo_available():
+        db = get_database()
+        if db is not None:
+            import asyncio
+            try:
+                loop = asyncio.get_running_loop()
+                loop.create_task(db["users"].update_one(
                     {"username": username_clean},
                     {"$set": user_data},
                     upsert=True
                 ))
-        except Exception:
-            pass
+            except Exception:
+                pass
 
     return {
         "id": user_id,

@@ -25,8 +25,8 @@ def get_db_client() -> Optional[AsyncIOMotorClient]:
         try:
             _client = AsyncIOMotorClient(
                 settings.MONGODB_URL,
-                serverSelectionTimeoutMS=2000,
-                connectTimeoutMS=2000,
+                serverSelectionTimeoutMS=500,
+                connectTimeoutMS=500,
             )
         except Exception:
             _client = None
@@ -42,7 +42,7 @@ def get_database() -> Optional[AsyncIOMotorDatabase]:
 
 
 async def check_mongo_connection() -> bool:
-    """Test ping to MongoDB server."""
+    """Test ping to MongoDB server with fast 500ms timeout."""
     global _is_connected
     client = get_db_client()
     if client is None:

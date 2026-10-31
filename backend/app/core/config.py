@@ -3,7 +3,7 @@ from typing import Optional
 
 
 class Settings(BaseSettings):
-    PROJECT_NAME: str = "SutraVesh / WonderLens Backend"
+    PROJECT_NAME: str = "SutraVesh Backend"
     VERSION: str = "0.1.0"
     API_V1_STR: str = "/api"
     
@@ -22,7 +22,7 @@ class Settings(BaseSettings):
     GROQ_REASONING_MODEL: str = "openai/gpt-oss-120b"
     
     # Wikipedia API
-    WIKIPEDIA_USER_AGENT: str = "WonderLensHackathon/1.0 (contact: team@sutravesh.local)"
+    WIKIPEDIA_USER_AGENT: str = "SutraVeshHackathon/1.0 (contact: team@sutravesh.local)"
 
     model_config = SettingsConfigDict(env_file=".env", extra="allow")
 
