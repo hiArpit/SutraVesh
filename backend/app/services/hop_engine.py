@@ -111,12 +111,31 @@ async def process_hop(
 
     verdict: HopVerdict = hop_result["verdict"]
     reason_text: str = hop_result["reason"]
-    connected_wonders: List[str] = hop_result.get("connected_wonders", [])
+    connected_wonders: List[str] = hop_result.get("connected_wonders", [source_concept] if verdict != "rejected" else [])
     connection_rule: Optional[str] = hop_result.get("connection_rule", None)
     bridges: List[str] = hop_result.get("resonance_bridges", [])
     evidence_urls: List[str] = hop_result.get("evidence_urls", [])
 
-    # 4. Multi-Discovery Scoring
+    # 4. Quest validation: in Quest Mode, an unconnected or rejected object CANNOT be accepted!
+    if request.mode == "quest" and (verdict == "rejected" or len(connected_wonders) == 0 or connection_rule == "None"):
+        return HopResponse(
+            valid=False,
+            verdict="rejected",
+            reason=reason_text if verdict == "rejected" else f"{new_concept.capitalize()} doesn't connect to {source_concept.capitalize()}! Can you find something related to {source_concept.capitalize()}?",
+            detected_object=detected_object,
+            detected_description=detected_description,
+            what_is_it=vision_what_is_it,
+            fun_fact=vision_fun_fact,
+            try_this=vision_try_this,
+            grade_level=vision_grade_level,
+            connection_rule="None",
+            points_awarded=0,
+            total_points=session.total_points,
+            badges_unlocked=[],
+            completed=False,
+        )
+
+    # 5. Multi-Discovery Scoring
     # If in World Mode and no prior wonder connects and no bridges, it's an independent new wonder island (+25 pts)
     is_independent_wonder = (request.mode == "world" and len(connected_wonders) == 0 and len(bridges) == 0)
     base_points = 25 if is_independent_wonder else POINTS[verdict]
@@ -136,7 +155,7 @@ async def process_hop(
         else:
             session.consecutive_established = 0
 
-    # 5. Build New Node & Edges across the canvas
+    # 6. Build New Node & Edges across the canvas
     new_node: Optional[Node] = None
     new_edges: List[Edge] = []
 
@@ -209,10 +228,10 @@ async def process_hop(
         session.edges.extend(new_edges)
         session.current_node_id = node_id
 
-    # 6. Badges
+    # 7. Badges
     new_badges = _evaluate_badges(session, verdict, resonance_count, request.mode)
 
-    # 7. Quest Goal Completion check
+    # 8. Quest Goal Completion check
     completed = False
     eureka_graph: Optional[EurekaGraph] = None
 

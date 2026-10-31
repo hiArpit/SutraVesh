@@ -352,3 +352,20 @@ def test_get_session_after_create():
     get_resp = client.get(f"/api/session/{sid}")
     assert get_resp.status_code == 200
     assert get_resp.json()["session_id"] == sid
+
+
+@pytest.mark.asyncio
+async def test_hop_unrelated_concept_in_quest_mode_is_rejected():
+    s = create_session("quest", "water")
+    req = HopRequest(
+        session_id=s.session_id,
+        mode="quest",
+        explanation="charging phone",
+        source_node_id="water",
+        target_node_id="charger",
+    )
+    result = await process_hop(req)
+    assert result.valid is False
+    assert result.verdict == "rejected"
+    assert result.points_awarded == 0
+    assert "doesn't connect" in result.reason or "does not connect" in result.reason

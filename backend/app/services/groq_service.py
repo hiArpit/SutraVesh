@@ -117,7 +117,7 @@ async def evaluate_hop(
     evidence_urls = [u for u in [source_wiki.get("url"), target_wiki.get("url")] if u]
 
     if not client:
-        return _reasoning_offline_fallback(source, target, evidence_urls, prior=prior)
+        return _reasoning_offline_fallback(source, target, evidence_urls, prior=prior, mode=mode)
 
     source_summary = source_wiki.get("summary", "")
     target_summary = target_wiki.get("summary", "")
@@ -132,7 +132,9 @@ Wikipedia says about "{target_wiki.get('title', target)}":
 "{target_summary}"
 --------------------------------------------
 
-The child is introducing a new discovery: "{target}"
+The child is exploring in mode: "{mode}"
+Starting wonder / goal: "{source}"
+The child discovered: "{target}"
 Their note / clue: "{explanation}"
 Their current trail of discovered wonders on the map is: {json.dumps(prior)}
 
@@ -151,15 +153,19 @@ Respond with ONLY valid JSON:
   "resonance_bridges": []
 }}
 
-Rules:
-- "established": Directly connects to one or more wonders in the trail through verified science, functional utility, or natural ecosystems.
-- "association": Connected through creative or everyday similarity, but less direct.
-- If "{target}" has NO valid connection to any wonder in {json.dumps(prior)}, set "verdict": "association", "connected_wonders": [], "connection_rule": "None", "reason": "{target} is an exciting new wonder ready to find its own connections!"
-- "rejected": Only if the claim asserts impossible magic (e.g. sand literally turns into bananas)."""
+Strict Rules:
+- "established": Directly connects to one or more wonders in the trail through one of the 4 Connection Rules.
+- "association": Connected through creative or everyday similarity (e.g. shared habitat, daily use, physical properties).
+- If "{target}" has NO valid connection to "{source}" or prior wonders:
+  * In mode="quest": You MUST set "verdict": "rejected", "connected_wonders": [], "connection_rule": "None", "reason": "{target} does not connect to {source}. Try finding something that relates to {source}!"
+  * In mode="world": Set "verdict": "association", "connected_wonders": [], "connection_rule": "None", "reason": "{target} is an exciting independent wonder! Discover related objects to connect it."
+- "rejected": Also if the claim asserts impossible magic (e.g. sand literally turns into bananas)."""
 
     system_instruction = (
         "You are an educational science evaluator for kids. "
-        "Strict Rule: If a claim asserts that one inanimate material physically turns into or becomes an unrelated living food/organism "
+        "Strict Rule 1: If an object has no scientific, physical, habitat, or functional connection to the starting concept in quest mode, "
+        "(e.g., 'water' and 'charger', 'sun' and 'eraser'), you MUST set verdict='rejected' and connected_wonders=[]. "
+        "Strict Rule 2: If a claim asserts that one inanimate material physically turns into or becomes an unrelated living food/organism "
         "(e.g., 'sand turns into bananas'), you MUST set verdict='rejected'."
     )
 
@@ -195,6 +201,10 @@ Rules:
         connection_rule = data.get("connection_rule", "Purpose & Teamwork")
         reason = data.get("reason", f"Great connection between {source} and {target}!")
 
+        # Enforce rejection in quest mode if no valid connection was made
+        if mode == "quest" and (len(connected_wonders) == 0 or connection_rule == "None"):
+            verdict = "rejected"
+
         return {
             "verdict": verdict,
             "connected_wonders": connected_wonders,
@@ -205,7 +215,7 @@ Rules:
             "fallback": False,
         }
     except Exception:
-        return _reasoning_offline_fallback(source, target, evidence_urls, prior=prior)
+        return _reasoning_offline_fallback(source, target, evidence_urls, prior=prior, mode=mode)
 
 
 async def _fetch_evidence_pair(source: str, target: str) -> Tuple[dict, dict]:
@@ -235,12 +245,61 @@ def _vision_offline_fallback() -> dict:
     }
 
 
-def _reasoning_offline_fallback(source: str, target: str, evidence_urls: list = None, prior: list = None) -> dict:
+def _reasoning_offline_fallback(source: str, target: str, evidence_urls: list = None, prior: list = None, mode: str = "quest") -> dict:
+    s_clean = source.lower().strip()
+    t_clean = target.lower().strip()
+    prior_clean = [p.lower().strip() for p in (prior or [source])]
+
+    # Material / Teamwork / Ecosystem pairs
+    related_clusters = [
+        {"book", "paper", "pen", "tree", "page", "pencil", "wood", "library"},
+        {"flower", "bee", "honey", "plant", "garden", "sun", "seed", "pollen"},
+        {"water", "cloud", "rain", "puddle", "ocean", "river", "ice", "fish", "stream", "lake", "photosynthesis"},
+        {"sun", "solar energy", "photosynthesis", "warmth", "light", "shadow", "star", "energy"},
+    ]
+
+    matched_prior = []
+    rule = "Purpose & Teamwork"
+    for p in prior_clean:
+        for cluster in related_clusters:
+            if t_clean in cluster and p in cluster:
+                matched_prior.append(p.capitalize())
+                if t_clean in {"book", "paper", "wood", "tree"}:
+                    rule = "Material & Ingredients"
+                elif t_clean in {"flower", "bee", "honey", "garden"}:
+                    rule = "Habitat & Ecosystem"
+                elif t_clean in {"sun", "water", "cloud", "rain", "puddle", "ice"}:
+                    rule = "Energy & Transformation"
+                break
+
+    if matched_prior:
+        return {
+            "verdict": "established",
+            "connected_wonders": matched_prior,
+            "connection_rule": rule,
+            "reason": f"Awesome connection! {target.capitalize()} connects with {', '.join(matched_prior)} via {rule}!",
+            "resonance_bridges": matched_prior[1:] if len(matched_prior) > 1 else [],
+            "evidence_urls": evidence_urls or [],
+            "fallback": True,
+        }
+
+    # If completely unrelated wonder (e.g. Charger for Water)
+    if mode == "quest":
+        return {
+            "verdict": "rejected",
+            "connected_wonders": [],
+            "connection_rule": "None",
+            "reason": f"{target.capitalize()} doesn't connect to {source.capitalize()}! Can you find something that relates to {source.capitalize()}?",
+            "resonance_bridges": [],
+            "evidence_urls": evidence_urls or [],
+            "fallback": True,
+        }
+
     return {
         "verdict": "association",
-        "connected_wonders": [source],
-        "connection_rule": "Purpose & Teamwork",
-        "reason": f"Creative discovery connecting {source} and {target}! Keep exploring.",
+        "connected_wonders": [],
+        "connection_rule": "None",
+        "reason": f"{target.capitalize()} is an exciting independent wonder! Discover related objects to connect it.",
         "resonance_bridges": [],
         "evidence_urls": evidence_urls or [],
         "fallback": True,
