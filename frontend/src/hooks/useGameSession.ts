@@ -39,9 +39,13 @@ function toFlowEdge(gEdge: GameEdge): Edge {
     id: `${gEdge.source}-${gEdge.target}`,
     source: gEdge.source,
     target: gEdge.target,
-    label: (gEdge.relationship || '').slice(0, 32),
-    style: { stroke: colorMap[gEdge.support] ?? '#a78bfa', strokeWidth: 2.5 },
-    animated: gEdge.support === 'established',
+    label: (gEdge.relationship || '').slice(0, 36),
+    type: 'smoothstep',
+    style: { stroke: colorMap[gEdge.support] ?? '#f59e0b', strokeWidth: 3.5 },
+    animated: true,
+    labelStyle: { fill: '#1e293b', fontWeight: 800, fontSize: 11 },
+    labelBgStyle: { fill: '#ffffff', fillOpacity: 0.95, stroke: '#fed7aa', strokeWidth: 1.5, rx: 8, ry: 8 },
+    labelBgPadding: [6, 8],
   }
 }
 
