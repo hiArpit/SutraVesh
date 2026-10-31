@@ -6,6 +6,7 @@ from app.core.config import settings
 from app.core.db import check_mongo_connection
 from app.api.routes import router
 from app.api.auth_routes import auth_router
+from app.api.quest_routes import quest_router
 
 
 @asynccontextmanager
@@ -32,8 +33,9 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-# Mount all game & auth routes
+# Mount all game, auth & quest routes
 app.include_router(auth_router)
+app.include_router(quest_router)
 app.include_router(router)
 
 
