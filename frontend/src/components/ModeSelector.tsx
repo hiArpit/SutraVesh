@@ -25,14 +25,16 @@ export default function ModeSelector({ onStart, onCaptureImage, loading = false 
   const [isCameraActive, setIsCameraActive] = useState(false)
   const [stream, setStream] = useState<MediaStream | null>(null)
   const [cameraError, setCameraError] = useState<string | null>(null)
+  const streamRef = useRef<MediaStream | null>(null)
 
   const stopCamera = useCallback(() => {
-    if (stream) {
-      stream.getTracks().forEach(t => t.stop())
-      setStream(null)
+    if (streamRef.current) {
+      streamRef.current.getTracks().forEach(t => t.stop())
+      streamRef.current = null
     }
+    setStream(null)
     setIsCameraActive(false)
-  }, [stream])
+  }, [])
 
   const startCamera = useCallback(async () => {
     setCameraError(null)
@@ -40,20 +42,29 @@ export default function ModeSelector({ onStart, onCaptureImage, loading = false 
       if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
         throw new Error('Camera is not supported on this browser.')
       }
-      const mediaStream = await navigator.mediaDevices.getUserMedia({
-        video: {
-          facingMode: { ideal: 'environment' },
-          width: { ideal: 1280 },
-          height: { ideal: 720 },
-        },
-        audio: false,
-      })
+
+      let mediaStream: MediaStream
+      try {
+        mediaStream = await navigator.mediaDevices.getUserMedia({
+          video: {
+            width: { ideal: 1280 },
+            height: { ideal: 720 },
+          },
+          audio: false,
+        })
+      } catch {
+        mediaStream = await navigator.mediaDevices.getUserMedia({
+          video: true,
+          audio: false,
+        })
+      }
+
+      if (streamRef.current) {
+        streamRef.current.getTracks().forEach(t => t.stop())
+      }
+      streamRef.current = mediaStream
       setStream(mediaStream)
       setIsCameraActive(true)
-      if (videoRef.current) {
-        videoRef.current.srcObject = mediaStream
-        videoRef.current.play().catch(() => {})
-      }
     } catch (err: any) {
       console.warn('Camera access error:', err)
       setCameraError(
@@ -65,17 +76,21 @@ export default function ModeSelector({ onStart, onCaptureImage, loading = false 
     }
   }, [])
 
+  // Only stop tracks on component unmount
   useEffect(() => {
     return () => {
-      stopCamera()
+      if (streamRef.current) {
+        streamRef.current.getTracks().forEach(t => t.stop())
+        streamRef.current = null
+      }
     }
-  }, [stopCamera])
+  }, [])
 
-  // Attach stream when video element becomes available
+  // Attach stream whenever camera is active and video element mounts
   useEffect(() => {
     if (isCameraActive && stream && videoRef.current) {
       videoRef.current.srcObject = stream
-      videoRef.current.play().catch(() => {})
+      videoRef.current.play().catch(e => console.warn('Video play error:', e))
     }
   }, [isCameraActive, stream])
 
@@ -195,7 +210,13 @@ export default function ModeSelector({ onStart, onCaptureImage, loading = false 
               {isCameraActive ? (
                 <>
                   <video
-                    ref={videoRef}
+                    ref={(el) => {
+                      videoRef.current = el
+                      if (el && stream && el.srcObject !== stream) {
+                        el.srcObject = stream
+                        el.play().catch(() => {})
+                      }
+                    }}
                     autoPlay
                     playsInline
                     muted
