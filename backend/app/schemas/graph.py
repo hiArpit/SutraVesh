@@ -52,6 +52,7 @@ class HopResponse(BaseModel):
     verdict: HopVerdict = Field(..., description="Verdict: established, association, or rejected")
     reason: str = Field(..., description="Friendly explanation for feedback")
     detected_object: Optional[str] = Field(default=None, description="Concept identified by Groq vision")
+    detected_description: Optional[str] = Field(default=None, description="Kid-friendly educational description of detected object")
     new_node: Optional[Node] = Field(default=None, description="Constructed node for the new concept")
     new_edges: List[Edge] = Field(default_factory=list, description="Edges linking new node to canvas")
     resonance_count: int = Field(default=0, description="Count of resonance links in World Mode")

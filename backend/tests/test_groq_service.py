@@ -82,6 +82,19 @@ async def test_vision_success():
 
 
 @pytest.mark.asyncio
+async def test_vision_success_with_educational_description():
+    mock_client = MagicMock()
+    mock_client.chat.completions.create.return_value = _mock_completion(
+        '{"concept": "desk lamp", "description": "A lamp uses electricity to create bright light for your desk!", "confidence": "high"}'
+    )
+    with patch("app.services.groq_service._get_client", return_value=mock_client):
+        result = await identify_concept_from_image(b"fake_image_bytes")
+    assert result["fallback"] is False
+    assert result["concept"] == "desk lamp"
+    assert "electricity" in result["description"]
+
+
+@pytest.mark.asyncio
 async def test_vision_handles_markdown_wrapped_json():
     raw = '```json\n{"concept": "volcano", "confidence": "medium"}\n```'
     mock_client = MagicMock()
