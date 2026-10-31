@@ -60,17 +60,19 @@ async def identify_concept_from_image(image_bytes: bytes, mime_type: str = "imag
                     ],
                 }
             ],
-            max_tokens=80,
+            max_tokens=160,
             temperature=0.1,
         )
 
         raw = completion.choices[0].message.content.strip()
         data = _parse_json_safe(raw)
         concept = sanitize_label(data.get("concept", "curious wonder"))
+        description = data.get("description", f"A wonderful {concept} discovered in the surrounding world!").strip()
         confidence = data.get("confidence", "medium")
 
         return {
             "concept": concept,
+            "description": description,
             "confidence": confidence if confidence in ("high", "medium", "low") else "medium",
             "fallback": False,
         }
@@ -190,7 +192,12 @@ async def _fetch_evidence_pair(source: str, target: str) -> tuple[dict, dict]:
 
 
 def _vision_offline_fallback() -> dict:
-    return {"concept": "interesting object", "confidence": "low", "fallback": True}
+    return {
+        "concept": "interesting object",
+        "description": "An intriguing object discovered in the surrounding world, ready to reveal its wonders!",
+        "confidence": "low",
+        "fallback": True,
+    }
 
 
 def _reasoning_offline_fallback(source: str, target: str, evidence_urls: list = None) -> dict:

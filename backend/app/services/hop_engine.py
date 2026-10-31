@@ -52,6 +52,7 @@ async def process_hop(
 
     # 2. Vision detection if photo uploaded
     detected_object: Optional[str] = None
+    detected_description: Optional[str] = None
     if image_bytes:
         vision_result = await identify_concept_from_image(image_bytes, mime_type)
         raw_label = vision_result.get("concept", "")
@@ -65,6 +66,7 @@ async def process_hop(
                 badges_unlocked=session.badges,
             )
         detected_object = sanitize_label(raw_label)
+        detected_description = vision_result.get("description", "")
 
     # Determine concept
     new_concept = detected_object or request.target_node_id or (
@@ -127,7 +129,7 @@ async def process_hop(
             id=node_id,
             label=new_concept.capitalize(),
             category=_infer_category(new_concept),
-            description=wiki.get("summary", ""),
+            description=detected_description or wiki.get("summary", ""),
             image_url=wiki.get("thumbnail"),
         )
 
@@ -193,6 +195,7 @@ async def process_hop(
         verdict=verdict,
         reason=reason_text,
         detected_object=detected_object,
+        detected_description=detected_description or (new_node.description if new_node else None),
         new_node=new_node,
         new_edges=new_edges,
         resonance_count=resonance_count,
