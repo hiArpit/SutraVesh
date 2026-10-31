@@ -91,12 +91,10 @@ export function useGameSession(currentUser?: UserProfile | null) {
   const [lastCardResponse, setLastCardResponse] = useState<HopResponse | null>(null)
   const [isCardModalOpen, setIsCardModalOpen] = useState(false)
 
-  // Switch/Reset in-memory canvas and load user-specific points when login/logout changes
+  // Synchronize user profile & map when user signs in or changes
   useEffect(() => {
     setSessionId(null)
     setActiveLevelNumber(null)
-    setNodes([])
-    setEdges([])
     setCompleted(false)
     setEurekaGraph(null)
     setLastCardResponse(null)
@@ -108,6 +106,18 @@ export function useGameSession(currentUser?: UserProfile | null) {
     const finalScore = Math.max(backendScore, localScore)
     setCumulativePoints(finalScore)
     localStorage.setItem(key, String(finalScore))
+
+    // Pre-fetch user map from MongoDB on login
+    if (currentUser) {
+      getUserMapApi().then(res => {
+        if (res && res.nodes && res.nodes.length > 0) {
+          const nodesKey = getMapNodesKey(currentUser)
+          const edgesKey = getMapEdgesKey(currentUser)
+          localStorage.setItem(nodesKey, JSON.stringify(res.nodes))
+          localStorage.setItem(edgesKey, JSON.stringify(res.edges || []))
+        }
+      })
+    }
   }, [currentUser?.username])
 
   const startSession = useCallback(async (
@@ -144,11 +154,12 @@ export function useGameSession(currentUser?: UserProfile | null) {
     }
   }, [setNodes, setEdges])
 
-  const applyHopResponse = useCallback((res: HopResponse) => {
+  const applyHopResponse = useCallback(async (res: HopResponse) => {
     setLastVerdict(res.verdict)
     setLastReason(res.reason)
     setLastPoints(res.points_awarded)
     setTotalPoints(res.total_points)
+
     if (res.points_awarded > 0) {
       setCumulativePoints(prev => {
         const nextPoints = prev + res.points_awarded
@@ -167,39 +178,40 @@ export function useGameSession(currentUser?: UserProfile | null) {
       return next
     })
 
+    let updatedNodes = [...nodes]
+    let updatedEdges = [...edges]
+
     if (res.new_node) {
-      setNodes(ns => {
-        if (ns.some(n => n.id === res.new_node!.id)) return ns
-        const nextNodes = [...ns, toFlowNode(res.new_node!, ns.length)]
-        const nodesKey = getMapNodesKey(currentUser)
-        localStorage.setItem(nodesKey, JSON.stringify(nextNodes))
-        if (currentUser) {
-          saveUserMapApi(nextNodes, edges)
-        }
-        return nextNodes
-      })
+      const idx = updatedNodes.length
+      const newNode = toFlowNode(res.new_node, idx)
+      if (!updatedNodes.some(n => n.id === newNode.id)) {
+        updatedNodes = [...updatedNodes, newNode]
+      }
       setCurrentNode(res.new_node.id)
 
-      // Open kid discovery card
       setLastCardResponse(res)
       window.history.pushState({ modal: 'card' }, '', '#card')
       setIsCardModalOpen(true)
     }
 
     if (res.new_edges && res.new_edges.length > 0) {
-      setEdges(es => {
-        const existingIds = new Set(es.map(e => e.id))
-        const newFlowEdges = res.new_edges
-          .map(toFlowEdge)
-          .filter(e => !existingIds.has(e.id))
-        const nextEdges = [...es, ...newFlowEdges]
-        const edgesKey = getMapEdgesKey(currentUser)
-        localStorage.setItem(edgesKey, JSON.stringify(nextEdges))
-        if (currentUser) {
-          saveUserMapApi(nodes, nextEdges)
-        }
-        return nextEdges
-      })
+      const existingIds = new Set(updatedEdges.map(e => e.id))
+      const newFlowEdges = res.new_edges
+        .map(toFlowEdge)
+        .filter(e => !existingIds.has(e.id))
+      updatedEdges = [...updatedEdges, ...newFlowEdges]
+    }
+
+    setNodes(updatedNodes)
+    setEdges(updatedEdges)
+
+    // Persist directly to MongoDB for authenticated user
+    const nodesKey = getMapNodesKey(currentUser)
+    const edgesKey = getMapEdgesKey(currentUser)
+    localStorage.setItem(nodesKey, JSON.stringify(updatedNodes))
+    localStorage.setItem(edgesKey, JSON.stringify(updatedEdges))
+    if (currentUser) {
+      await saveUserMapApi(updatedNodes, updatedEdges)
     }
 
     // Quest Level completion and lock progression
@@ -217,7 +229,6 @@ export function useGameSession(currentUser?: UserProfile | null) {
       }
       confetti({ particleCount: 200, spread: 90, origin: { y: 0.5 }, colors: ['#a78bfa','#22d3ee','#fbbf24', '#10b981'] })
     } else if (res.valid && res.new_edges && res.new_edges.length > 0 && activeLevelNumber && [1, 2, 3].includes(activeLevelNumber)) {
-      // Tier 1 casual discovery (1-hop): any valid discovery successfully clears the level!
       setCompleted(true)
       const lKey = getLevelKey(currentUser)
       const currentUnlocked = Number(localStorage.getItem(lKey) || String(currentUser?.max_level || 1))
@@ -259,50 +270,58 @@ export function useGameSession(currentUser?: UserProfile | null) {
       let savedNodes: Node[] = []
       let savedEdges: Edge[] = []
 
-      try {
-        const localNodes = localStorage.getItem(nodesKey)
-        const localEdges = localStorage.getItem(edgesKey)
-        if (localNodes) savedNodes = JSON.parse(localNodes)
-        if (localEdges) savedEdges = JSON.parse(localEdges)
-      } catch (e) {
-        console.warn('Error reading local map cache', e)
-      }
-
-      if (currentUser && savedNodes.length === 0) {
-        const remote = await getUserMapApi()
-        if (remote && remote.nodes && remote.nodes.length > 0) {
-          savedNodes = remote.nodes
-          savedEdges = remote.edges || []
-          localStorage.setItem(nodesKey, JSON.stringify(savedNodes))
-          localStorage.setItem(edgesKey, JSON.stringify(savedEdges))
+      // 1. Primary: Fetch from MongoDB for authenticated user
+      if (currentUser) {
+        try {
+          const remote = await getUserMapApi()
+          if (remote && remote.nodes && remote.nodes.length > 0) {
+            savedNodes = remote.nodes
+            savedEdges = remote.edges || []
+            localStorage.setItem(nodesKey, JSON.stringify(savedNodes))
+            localStorage.setItem(edgesKey, JSON.stringify(savedEdges))
+          }
+        } catch (e) {
+          console.warn('MongoDB map fetch error:', e)
         }
       }
 
-      // If user has no saved nodes yet, create a welcoming initial wonder
+      // 2. Fallback: local storage
+      if (savedNodes.length === 0) {
+        try {
+          const localNodes = localStorage.getItem(nodesKey)
+          const localEdges = localStorage.getItem(edgesKey)
+          if (localNodes) savedNodes = JSON.parse(localNodes)
+          if (localEdges) savedEdges = JSON.parse(localEdges)
+        } catch (e) {
+          console.warn('Error reading local map cache', e)
+        }
+      }
+
+      // 3. If brand-new user with zero discoveries yet
       if (savedNodes.length === 0) {
         const initialNode: Node = {
-          id: 'discovery_world',
+          id: 'ready_to_discover',
           type: 'bubble',
           position: { x: 400, y: 300 },
           data: {
-            label: 'Discovery World',
+            label: 'Ready to Discover',
             category: 'general',
-            description: 'Your personal discovery map! Snap or discover anything around you to branch out your world.',
-            what_is_it: 'Your very own world of curiosities!',
-            fun_fact: 'Every object you capture gets woven into this map!',
-            try_this: 'Use the camera below to capture a book, pen, plant, or anything in your room!',
+            description: 'Your map is ready! Snap any object in your room using the camera below to place your first wonder.',
+            what_is_it: 'Your blank discovery canvas waiting for real-world wonders!',
+            fun_fact: 'Every object you photograph gets woven into your personal discovery universe!',
+            try_this: 'Tap the camera button below and snap a book, bottle, or plant!',
             grade_level: 'Grade 1.3',
           },
         }
         savedNodes = [initialNode]
       }
 
-      const activeSeed = (savedNodes[0]?.data as any)?.label || 'Discovery World'
+      const activeSeed = (savedNodes[0]?.data as any)?.label || 'Discovery'
       const sessionRes = await createSession('world', activeSeed)
       setSessionId(sessionRes.session_id)
       setNodes(savedNodes)
       setEdges(savedEdges)
-      setCurrentNode(savedNodes[savedNodes.length - 1]?.id || 'discovery_world')
+      setCurrentNode(savedNodes[savedNodes.length - 1]?.id || 'ready_to_discover')
     } finally {
       setLoading(false)
     }
@@ -316,12 +335,29 @@ export function useGameSession(currentUser?: UserProfile | null) {
       const edgesKey = getMapEdgesKey(currentUser)
       let existingNodes: Node[] = []
       let existingEdges: Edge[] = []
-      try {
-        const localN = localStorage.getItem(nodesKey)
-        const localE = localStorage.getItem(edgesKey)
-        if (localN) existingNodes = JSON.parse(localN)
-        if (localE) existingEdges = JSON.parse(localE)
-      } catch {}
+
+      // 1. Fetch from MongoDB first for logged-in user
+      if (currentUser) {
+        try {
+          const remote = await getUserMapApi()
+          if (remote && remote.nodes && remote.nodes.length > 0) {
+            existingNodes = remote.nodes
+            existingEdges = remote.edges || []
+          }
+        } catch (e) {
+          console.warn('MongoDB map fetch error:', e)
+        }
+      }
+
+      // 2. Fallback to localStorage if empty
+      if (existingNodes.length === 0) {
+        try {
+          const localN = localStorage.getItem(nodesKey)
+          const localE = localStorage.getItem(edgesKey)
+          if (localN) existingNodes = JSON.parse(localN)
+          if (localE) existingEdges = JSON.parse(localE)
+        } catch {}
+      }
 
       const seedConcept = existingNodes.length > 0 && (existingNodes[0].data as any)?.label
         ? (existingNodes[0].data as any).label
@@ -390,11 +426,11 @@ export function useGameSession(currentUser?: UserProfile | null) {
       window.history.pushState({ modal: 'card' }, '', '#card')
       setIsCardModalOpen(true)
 
-      // Persist map
+      // 3. Persist directly to MongoDB and local storage
       localStorage.setItem(nodesKey, JSON.stringify(updatedNodes))
       localStorage.setItem(edgesKey, JSON.stringify(updatedEdges))
       if (currentUser) {
-        saveUserMapApi(updatedNodes, updatedEdges)
+        await saveUserMapApi(updatedNodes, updatedEdges)
       }
     } finally {
       setLoading(false)
@@ -413,7 +449,7 @@ export function useGameSession(currentUser?: UserProfile | null) {
         currentNode,
         concept.toLowerCase().replace(/ /g, '_')
       )
-      applyHopResponse(res)
+      await applyHopResponse(res)
     } finally {
       setLoading(false)
     }
@@ -432,7 +468,7 @@ export function useGameSession(currentUser?: UserProfile | null) {
         currentNode,
         questTarget?.toLowerCase().replace(/ /g, '_')
       )
-      applyHopResponse(res)
+      await applyHopResponse(res)
     } finally {
       setLoading(false)
     }
