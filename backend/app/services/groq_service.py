@@ -184,9 +184,9 @@ Respond ONLY with a JSON object:
 }}
 
 Verdict rules (apply strictly against the Wikipedia evidence):
-- "established": the Wikipedia evidence directly supports a factual scientific link
-- "association": a plausible creative or indirect link not contradicted by evidence
-- "rejected": completely unrelated, contradicted by evidence, or nonsensical
+- "established": the Wikipedia evidence directly supports a factual scientific or functional link
+- "association": a plausible creative or indirect link, or shared real-world purpose, not contradicted by evidence
+- "rejected": completely unrelated, impossible transformation (e.g. one material turns into an unrelated food or object), contradicted by science, or nonsensical
 {world_instruction}"""
 
     # --- Step 3: Call Groq Reasoning model ---
@@ -194,8 +194,9 @@ Verdict rules (apply strictly against the Wikipedia evidence):
         completion = _get_client().chat.completions.create(
             model=settings.GROQ_REASONING_MODEL,
             messages=[{"role": "user", "content": prompt}],
+            response_format={"type": "json_object"},
             max_tokens=200,
-            temperature=0.2,
+            temperature=0.1,
         )
 
         raw = completion.choices[0].message.content.strip()
