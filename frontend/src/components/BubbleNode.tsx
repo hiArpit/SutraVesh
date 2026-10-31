@@ -5,7 +5,11 @@ import type { NodeProps, Node } from '@xyflow/react'
 interface BubbleData extends Record<string, unknown> {
   label: string
   category: string
-  description: string
+  description?: string
+  what_is_it?: string
+  fun_fact?: string
+  try_this?: string
+  grade_level?: string
 }
 
 type BubbleNodeType = Node<BubbleData>
@@ -38,13 +42,23 @@ export default memo(function BubbleNode({ data }: NodeProps<BubbleNodeType>) {
         {data.label}
       </p>
 
-      {data.description && (
-        <div className="absolute bottom-full mb-3 left-1/2 -translate-x-1/2 w-52
-          bg-white text-slate-800 border-2 border-orange-200 text-xs rounded-2xl p-3
+      {(data.what_is_it || data.description) && (
+        <div className="absolute bottom-full mb-3 left-1/2 -translate-x-1/2 w-60
+          bg-white text-slate-800 border-2 border-orange-200 text-xs rounded-2xl p-3.5
           opacity-0 group-hover:opacity-100 pointer-events-none z-50 shadow-2xl
           transition-opacity duration-200">
-          <p className="font-bold text-orange-600 text-[11px] mb-1 capitalize">🌿 {data.category}</p>
-          <p className="text-slate-600 text-[11px] leading-relaxed">{data.description.slice(0, 110)}…</p>
+          <div className="flex items-center justify-between mb-1">
+            <span className="font-bold text-orange-600 text-[11px] capitalize">🌿 {data.category}</span>
+            <span className="text-[10px] text-slate-400 font-bold">{data.grade_level || 'Grade 1.3'}</span>
+          </div>
+          <p className="text-slate-800 font-medium text-[11px] leading-relaxed mb-1.5">
+            {data.what_is_it || data.description}
+          </p>
+          {data.fun_fact && (
+            <p className="text-amber-800 bg-amber-50 rounded-xl p-1.5 text-[10px] font-semibold leading-tight border border-amber-100">
+              ☀️ {data.fun_fact}
+            </p>
+          )}
         </div>
       )}
 

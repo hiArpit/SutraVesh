@@ -10,6 +10,7 @@ import ScorePanel from './components/ScorePanel'
 import EurekaCard from './components/EurekaCard'
 import BubbleNode from './components/BubbleNode'
 import AuthModal from './components/AuthModal'
+import DiscoveryCardModal from './components/DiscoveryCardModal'
 import { getMeApi, logoutApi } from './api/client'
 
 const NODE_TYPES = { bubble: BubbleNode }
@@ -34,7 +35,8 @@ export default function App() {
     loading, totalPoints, hopsCount, badges,
     lastVerdict, lastReason, lastPoints,
     completed, eurekaGraph,
-    startSession, handleTextHop, handleImageHop, reset,
+    lastCardResponse, isCardModalOpen, setIsCardModalOpen,
+    startSession, startSessionWithImage, handleTextHop, handleImageHop, reset,
   } = useGameSession()
 
   // ── Landing screen ──────────────────────────────────────────────────────────
@@ -44,7 +46,11 @@ export default function App() {
         <div className="absolute top-4 right-4 z-40">
           <AuthModal user={currentUser} onAuthChange={setCurrentUser} onLogout={handleLogout} />
         </div>
-        <ModeSelector onStart={startSession} />
+        <ModeSelector
+          onStart={startSession}
+          onCaptureImage={startSessionWithImage}
+          loading={loading}
+        />
       </div>
     )
   }
@@ -130,6 +136,13 @@ export default function App() {
           questTarget={questTarget}
         />
       </div>
+
+      {/* OVERLAY: Kid Discovery Card modal on object capture */}
+      <DiscoveryCardModal
+        isOpen={isCardModalOpen}
+        cardData={lastCardResponse}
+        onClose={() => setIsCardModalOpen(false)}
+      />
 
       {/* OVERLAY: Eureka card on quest completion */}
       <AnimatePresence>
