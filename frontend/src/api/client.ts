@@ -52,6 +52,22 @@ export function logoutApi() {
   localStorage.removeItem('sutravesh_token')
 }
 
+export async function updateUserProgressApi(params: {
+  total_score?: number
+  quests_completed?: number
+  max_level?: number
+}) {
+  const token = localStorage.getItem('sutravesh_token')
+  if (!token) return null
+  try {
+    const { data } = await axios.post(`${BASE}/auth/progress`, params)
+    return data
+  } catch (err) {
+    console.error('Failed to sync user progress to backend', err)
+    return null
+  }
+}
+
 // ── Game Session APIs ────────────────────────────────────────────────────────
 export async function createSession(
   mode: PlayMode,

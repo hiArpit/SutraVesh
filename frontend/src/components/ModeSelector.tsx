@@ -1,16 +1,17 @@
 import { useState, useRef, useEffect, useCallback } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
 import { ArrowRight, X, Camera, Upload, Info } from 'lucide-react'
-import type { PlayMode, QuestLevel } from '../types/game'
+import type { PlayMode, QuestLevel, UserProfile } from '../types/game'
 import QuestJourneyModal from './QuestJourneyModal'
 
 interface Props {
   onStart: (mode: PlayMode, seed: string, target?: string, levelNumber?: number) => void
   onCaptureImage?: (file: File) => void
   loading?: boolean
+  currentUser?: UserProfile | null
 }
 
-export default function ModeSelector({ onStart, onCaptureImage, loading = false }: Props) {
+export default function ModeSelector({ onStart, onCaptureImage, loading = false, currentUser }: Props) {
   const [isJourneyModalOpen, setIsJourneyModalOpen] = useState(false)
   const [isOpenCustomModal, setIsOpenCustomModal] = useState(false)
   const [isRulesModalOpen, setIsRulesModalOpen] = useState(false)
@@ -173,9 +174,16 @@ export default function ModeSelector({ onStart, onCaptureImage, loading = false 
             <Info size={14} className="text-orange-500" />
             <span>Connection Rules</span>
           </button>
-          <span className="hidden sm:inline-block px-3 py-1 bg-emerald-50 text-emerald-800 border border-emerald-200 rounded-full text-xs font-bold">
-            🌱 Guest Explorer Mode
-          </span>
+          {currentUser ? (
+            <span className="hidden sm:inline-flex items-center gap-1.5 px-3 py-1 bg-amber-50 text-amber-900 border border-amber-200 rounded-full text-xs font-bold shadow-xs">
+              <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse"></span>
+              <span>Explorer: {currentUser.display_name || currentUser.username}</span>
+            </span>
+          ) : (
+            <span className="hidden sm:inline-block px-3 py-1 bg-emerald-50 text-emerald-800 border border-emerald-200 rounded-full text-xs font-bold">
+              🌱 Guest Explorer Mode
+            </span>
+          )}
         </div>
       </div>
 
@@ -392,6 +400,7 @@ export default function ModeSelector({ onStart, onCaptureImage, loading = false 
         isOpen={isJourneyModalOpen}
         onClose={() => setIsJourneyModalOpen(false)}
         onSelectLevel={handleSelectLevel}
+        currentUser={currentUser}
       />
 
       {/* CONNECTION RULES EXPLANATION MODAL */}

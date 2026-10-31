@@ -4,6 +4,7 @@ Authentication Routes
 POST /api/auth/register  — Create a new account
 POST /api/auth/login     — Sign in & obtain JWT access token
 GET  /api/auth/me        — Get logged-in user profile
+POST /api/auth/progress  — Save/sync user quest and score progress
 """
 
 from fastapi import APIRouter, HTTPException, Depends
@@ -16,6 +17,7 @@ from app.core.auth import (
     create_access_token,
     require_user,
     get_current_user,
+    update_user_progress,
 )
 
 auth_router = APIRouter(prefix="/api/auth", tags=["authentication"])
@@ -30,6 +32,12 @@ class UserRegisterRequest(BaseModel):
 class UserLoginRequest(BaseModel):
     username: str
     password: str
+
+
+class UpdateProgressRequest(BaseModel):
+    total_score: Optional[int] = None
+    quests_completed: Optional[int] = None
+    max_level: Optional[int] = None
 
 
 class AuthTokenResponse(BaseModel):
@@ -57,3 +65,14 @@ async def login(body: UserLoginRequest):
 @auth_router.get("/me")
 async def get_me(user: dict = Depends(require_user)):
     return user
+
+
+@auth_router.post("/progress")
+async def save_progress(body: UpdateProgressRequest, user: dict = Depends(require_user)):
+    updated = update_user_progress(
+        username=user["username"],
+        total_score=body.total_score,
+        quests_completed=body.quests_completed,
+        max_level=body.max_level,
+    )
+    return updated

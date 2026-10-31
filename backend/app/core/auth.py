@@ -87,6 +87,7 @@ def register_user(username: str, password: str, display_name: Optional[str] = No
         "created_at": datetime.now(timezone.utc).isoformat(),
         "total_score": 0,
         "quests_completed": 0,
+        "max_level": 1,
     }
 
     # Save to file backup
@@ -112,6 +113,9 @@ def register_user(username: str, password: str, display_name: Optional[str] = No
         "id": user_id,
         "username": username_clean,
         "display_name": user_data["display_name"],
+        "total_score": 0,
+        "quests_completed": 0,
+        "max_level": 1,
     }
 
 
@@ -127,6 +131,9 @@ def authenticate_user(username: str, password: str) -> Optional[dict]:
         "id": user["id"],
         "username": user["username"],
         "display_name": user["display_name"],
+        "total_score": user.get("total_score", 0),
+        "quests_completed": user.get("quests_completed", 0),
+        "max_level": user.get("max_level", 1),
     }
 
 
@@ -157,6 +164,56 @@ def get_current_user(credentials: Optional[HTTPAuthorizationCredentials] = Depen
         "display_name": user["display_name"],
         "total_score": user.get("total_score", 0),
         "quests_completed": user.get("quests_completed", 0),
+        "max_level": user.get("max_level", 1),
+    }
+
+
+def update_user_progress(
+    username: str,
+    total_score: Optional[int] = None,
+    quests_completed: Optional[int] = None,
+    max_level: Optional[int] = None,
+) -> dict:
+    users = _load_users_file()
+    username_clean = username.strip().lower()
+    user = users.get(username_clean)
+    if not user:
+        raise HTTPException(status_code=404, detail="User not found")
+
+    if total_score is not None:
+        user["total_score"] = max(user.get("total_score", 0), int(total_score))
+    if quests_completed is not None:
+        user["quests_completed"] = max(user.get("quests_completed", 0), int(quests_completed))
+    if max_level is not None:
+        user["max_level"] = max(user.get("max_level", 1), int(max_level))
+
+    users[username_clean] = user
+    _save_users_file(users)
+
+    if is_mongo_available():
+        db = get_database()
+        if db is not None:
+            import asyncio
+            try:
+                loop = asyncio.get_running_loop()
+                loop.create_task(db["users"].update_one(
+                    {"username": username_clean},
+                    {"$set": {
+                        "total_score": user.get("total_score", 0),
+                        "quests_completed": user.get("quests_completed", 0),
+                        "max_level": user.get("max_level", 1),
+                    }}
+                ))
+            except Exception:
+                pass
+
+    return {
+        "id": user["id"],
+        "username": user["username"],
+        "display_name": user["display_name"],
+        "total_score": user.get("total_score", 0),
+        "quests_completed": user.get("quests_completed", 0),
+        "max_level": user.get("max_level", 1),
     }
 
 
