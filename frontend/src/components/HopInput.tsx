@@ -1,6 +1,7 @@
-import { useState, useRef } from 'react'
+import { useState } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
 import { Camera, Send, Loader2, X, Sparkles } from 'lucide-react'
+import LiveCameraModal from './LiveCameraModal'
 import type { PlayMode } from '../types/game'
 
 interface Props {
@@ -28,11 +29,9 @@ export default function HopInput({
   const [explanation, setExplanation] = useState('')
   const [imageFile, setImageFile] = useState<File | null>(null)
   const [imagePreview, setImagePreview] = useState<string | null>(null)
-  const fileRef = useRef<HTMLInputElement>(null)
+  const [isCameraOpen, setIsCameraOpen] = useState(false)
 
-  const handleImage = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0]
-    if (!file) return
+  const handleCapturedPhoto = (file: File) => {
     setImageFile(file)
     setImagePreview(URL.createObjectURL(file))
   }
@@ -40,13 +39,11 @@ export default function HopInput({
   const clearImage = () => {
     setImageFile(null)
     setImagePreview(null)
-    if (fileRef.current) fileRef.current.value = ''
   }
 
   const handleSubmit = async () => {
     if (loading || disabled) return
     if (imageFile) {
-      // Photo hop: explanation is completely optional!
       await onImageHop(explanation.trim() || `Discovered object in environment`, imageFile)
     } else {
       if (!concept.trim() || !explanation.trim()) return
@@ -83,7 +80,7 @@ export default function HopInput({
         )}
       </div>
 
-      {/* Quick Clue Chips (only when typing) */}
+      {/* Quick Clue Chips (when typing) */}
       {!imageFile && (
         <div className="flex flex-wrap gap-1.5 justify-center mb-2">
           {CLUE_CHIPS.map(chip => (
@@ -118,6 +115,7 @@ export default function HopInput({
               <p className="text-[11px] text-slate-400">Click &quot;DISCOVER NOW&quot; below or add an optional note</p>
             </div>
             <button
+              type="button"
               onClick={clearImage}
               className="ml-auto bg-rose-500/80 hover:bg-rose-500 text-white rounded-full p-1 cursor-pointer transition-colors"
             >
@@ -129,24 +127,17 @@ export default function HopInput({
 
       {/* Main interactive bar */}
       <div className="w-full bg-slate-900/95 backdrop-blur-md rounded-2xl border-2 border-slate-700 focus-within:border-violet-500 shadow-2xl p-2.5 flex items-center gap-2 transition-all">
-        {/* Camera Snap Button */}
+        {/* Camera Live Viewfinder Trigger */}
         <button
           type="button"
-          onClick={() => fileRef.current?.click()}
+          onClick={() => setIsCameraOpen(true)}
           disabled={disabled}
-          className="p-2.5 rounded-xl bg-slate-800 hover:bg-violet-600 transition-colors text-violet-300 hover:text-white cursor-pointer disabled:opacity-40"
-          title="Snap / Upload an object photo"
+          className="p-2.5 rounded-xl bg-violet-600/30 hover:bg-violet-600 transition-colors text-violet-300 hover:text-white cursor-pointer disabled:opacity-40 flex items-center gap-1.5"
+          title="Open live camera lens"
         >
           <Camera size={19} />
+          <span className="text-[11px] font-bold hidden sm:inline">Camera</span>
         </button>
-        <input
-          ref={fileRef}
-          type="file"
-          accept="image/*"
-          capture="environment"
-          className="hidden"
-          onChange={handleImage}
-        />
 
         {!imageFile ? (
           <>
@@ -200,6 +191,13 @@ export default function HopInput({
           )}
         </button>
       </div>
+
+      {/* Live Camera Viewfinder Modal */}
+      <LiveCameraModal
+        isOpen={isCameraOpen}
+        onClose={() => setIsCameraOpen(false)}
+        onCapture={handleCapturedPhoto}
+      />
     </motion.div>
   )
 }
