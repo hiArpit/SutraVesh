@@ -3,7 +3,6 @@ import type { HopResponse, PlayMode, GameNode, GameEdge } from '../types/game'
 
 const BASE = '/api'
 
-// ── Create a new game session ─────────────────────────────────────────────────
 export async function createSession(
   mode: PlayMode,
   seedConcept: string,
@@ -17,7 +16,6 @@ export async function createSession(
   return data as { session_id: string; mode: string; message: string }
 }
 
-// ── Submit a text hop ─────────────────────────────────────────────────────────
 export async function submitHop(
   sessionId: string,
   mode: PlayMode,
@@ -35,19 +33,20 @@ export async function submitHop(
   return data
 }
 
-// ── Submit an image hop ───────────────────────────────────────────────────────
 export async function submitImageHop(
   sessionId: string,
   mode: PlayMode,
   explanation: string,
   imageFile: File,
-  sourceNodeId?: string
+  sourceNodeId?: string,
+  questTargetId?: string
 ): Promise<HopResponse> {
   const form = new FormData()
   form.append('session_id', sessionId)
   form.append('mode', mode)
   form.append('explanation', explanation)
   if (sourceNodeId) form.append('source_node_id', sourceNodeId)
+  if (questTargetId) form.append('target_node_id', questTargetId)
   form.append('image', imageFile)
 
   const { data } = await axios.post(`${BASE}/hop/image`, form, {
@@ -56,7 +55,6 @@ export async function submitImageHop(
   return data
 }
 
-// ── Discover seed concepts ────────────────────────────────────────────────────
 export async function discoverConcepts(sessionId: string, seed: string) {
   const { data } = await axios.post(
     `${BASE}/discover?session_id=${encodeURIComponent(sessionId)}&seed=${encodeURIComponent(seed)}`
