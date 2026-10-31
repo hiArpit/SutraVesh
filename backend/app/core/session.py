@@ -1,17 +1,20 @@
 """
-Session Manager
-===============
-In-memory store for active game sessions.
-Each session tracks the full canvas state: nodes, edges,
-current score, hop history, badges, mode, and quest target.
-
-For a hackathon, in-memory is perfect.
-A production build would swap this for Redis.
+Persistent File-Backed Session Manager
+======================================
+Stores active game sessions on disk (backend/data/sessions.json)
+so that server reloads or restarts NEVER wipe out a player's active session!
 """
 
+import json
+import os
 import uuid
 from typing import Optional
 from app.schemas.graph import Node, Edge, PlayMode
+
+DATA_DIR = os.path.join(os.path.dirname(os.path.dirname(__file__)), "data")
+SESSIONS_FILE = os.path.join(DATA_DIR, "sessions.json")
+
+os.makedirs(DATA_DIR, exist_ok=True)
 
 
 class GameSession:
@@ -21,30 +24,32 @@ class GameSession:
         mode: PlayMode,
         seed_concept: str,
         quest_target: Optional[str] = None,
+        total_points: int = 0,
+        hops_taken: int = 0,
+        hops_saved: int = 0,
+        consecutive_established: int = 0,
+        badges: list[str] = None,
+        island_count: int = 0,
+        completed: bool = False,
+        current_node_id: Optional[str] = None,
+        nodes: list[dict] = None,
+        edges: list[dict] = None,
     ):
         self.session_id = session_id
         self.mode = mode
-        self.quest_target = quest_target          # only used in quest mode
+        self.quest_target = quest_target
+        self.total_points = total_points
+        self.hops_taken = hops_taken
+        self.hops_saved = hops_saved
+        self.consecutive_established = consecutive_established
+        self.badges = badges or []
+        self.island_count = island_count
+        self.completed = completed
+        self.current_node_id = current_node_id or seed_concept.lower().replace(" ", "_")
 
-        # Canvas state
-        self.nodes: list[Node] = []
-        self.edges: list[Edge] = []
-
-        # Scoring
-        self.total_points: int = 0
-        self.hops_taken: int = 0
-        self.hops_saved: int = 0                  # established vs path length
-        self.consecutive_established: int = 0     # for Einstein badge
-
-        # Badges
-        self.badges: list[str] = []
-
-        # World-mode island tracking
-        self.island_count: int = 0
-
-        # Quest completion
-        self.completed: bool = False
-        self.current_node_id: str = seed_concept.lower().replace(" ", "_")
+        # Reconstruct Node and Edge objects if loaded from dict
+        self.nodes: list[Node] = [Node(**n) if isinstance(n, dict) else n for n in (nodes or [])]
+        self.edges: list[Edge] = [Edge(**e) if isinstance(e, dict) else e for e in (edges or [])]
 
     def to_dict(self) -> dict:
         return {
@@ -53,17 +58,33 @@ class GameSession:
             "quest_target": self.quest_target,
             "total_points": self.total_points,
             "hops_taken": self.hops_taken,
+            "hops_saved": self.hops_saved,
+            "consecutive_established": self.consecutive_established,
             "badges": self.badges,
-            "node_count": len(self.nodes),
-            "edge_count": len(self.edges),
+            "island_count": self.island_count,
             "completed": self.completed,
+            "current_node_id": self.current_node_id,
+            "nodes": [n.model_dump() for n in self.nodes],
+            "edges": [e.model_dump() for e in self.edges],
         }
 
 
-# ---------------------------------------------------------------------------
-# In-memory store
-# ---------------------------------------------------------------------------
-_sessions: dict[str, GameSession] = {}
+def _load_all_sessions() -> dict[str, dict]:
+    if not os.path.exists(SESSIONS_FILE):
+        return {}
+    try:
+        with open(SESSIONS_FILE, "r", encoding="utf-8") as f:
+            return json.load(f)
+    except Exception:
+        return {}
+
+
+def _save_all_sessions(data: dict[str, dict]) -> None:
+    try:
+        with open(SESSIONS_FILE, "w", encoding="utf-8") as f:
+            json.dump(data, f, indent=2)
+    except Exception:
+        pass
 
 
 def create_session(
@@ -78,21 +99,46 @@ def create_session(
         seed_concept=seed_concept,
         quest_target=quest_target,
     )
-    _sessions[session_id] = session
+    sessions = _load_all_sessions()
+    sessions[session_id] = session.to_dict()
+    _save_all_sessions(sessions)
     return session
 
 
 def get_session(session_id: str) -> Optional[GameSession]:
-    return _sessions.get(session_id)
+    sessions = _load_all_sessions()
+    data = sessions.get(session_id)
+    if not data:
+        return None
+    return GameSession(
+        session_id=data["session_id"],
+        mode=data["mode"],
+        seed_concept=data.get("current_node_id", "concept"),
+        quest_target=data.get("quest_target"),
+        total_points=data.get("total_points", 0),
+        hops_taken=data.get("hops_taken", 0),
+        hops_saved=data.get("hops_saved", 0),
+        consecutive_established=data.get("consecutive_established", 0),
+        badges=data.get("badges", []),
+        island_count=data.get("island_count", 0),
+        completed=data.get("completed", False),
+        current_node_id=data.get("current_node_id"),
+        nodes=data.get("nodes", []),
+        edges=data.get("edges", []),
+    )
 
 
 def update_session(session: GameSession) -> None:
-    _sessions[session.session_id] = session
+    sessions = _load_all_sessions()
+    sessions[session.session_id] = session.to_dict()
+    _save_all_sessions(sessions)
 
 
 def delete_session(session_id: str) -> None:
-    _sessions.pop(session_id, None)
+    sessions = _load_all_sessions()
+    sessions.pop(session_id, None)
+    _save_all_sessions(sessions)
 
 
 def active_session_count() -> int:
-    return len(_sessions)
+    return len(_load_all_sessions())
