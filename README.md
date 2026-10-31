@@ -64,6 +64,12 @@ Both objects sit on the user's interactive spatial canvas (`Smartphone` + `Soda 
 
 ---
 
+### 6. Connected Relationship Threads (e.g. Book ⟷ Pen)
+When companion wonders are captured, SutraVesh dynamically weaves an animated connecting thread directly between them, with live evidence grounding and child-friendly educational explanations (`Pens help write in books, making stories come alive!` · Purpose & Teamwork · Established Link +50 pts):
+![Connected Relationship Thread](docs/screenshots/06_connected_relationship_thread.png)
+
+---
+
 ## 🎯 How Wonders Connect: The 4 Connection Rules
 
 SutraVesh evaluates every relationship using four core real-world connection principles:
