@@ -9,6 +9,10 @@ export interface GameNode {
   label: string
   category: string
   description: string
+  what_is_it?: string
+  fun_fact?: string
+  try_this?: string
+  grade_level?: string
   island_id?: string | null
   image_url?: string | null
 }
@@ -19,6 +23,7 @@ export interface GameEdge {
   relationship: string
   support: EdgeSupport
   evidence_urls: string[]
+  connection_rule?: string
 }
 
 export interface EurekaGraph {
@@ -36,6 +41,12 @@ export interface HopResponse {
   verdict: HopVerdict
   reason: string
   detected_object?: string | null
+  detected_description?: string | null
+  what_is_it?: string | null
+  fun_fact?: string | null
+  try_this?: string | null
+  grade_level?: string | null
+  connection_rule?: string | null
   new_node?: GameNode | null
   new_edges: GameEdge[]
   resonance_count: number

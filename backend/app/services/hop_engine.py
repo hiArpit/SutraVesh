@@ -53,6 +53,11 @@ async def process_hop(
     # 2. Vision detection if photo uploaded
     detected_object: Optional[str] = None
     detected_description: Optional[str] = None
+    vision_what_is_it: Optional[str] = None
+    vision_fun_fact: Optional[str] = None
+    vision_try_this: Optional[str] = None
+    vision_grade_level: Optional[str] = "Grade 1.3"
+
     if image_bytes:
         vision_result = await identify_concept_from_image(image_bytes, mime_type)
         raw_label = vision_result.get("concept", "")
@@ -67,12 +72,23 @@ async def process_hop(
             )
         detected_object = sanitize_label(raw_label)
         detected_description = vision_result.get("description", "")
+        vision_what_is_it = vision_result.get("what_is_it")
+        vision_fun_fact = vision_result.get("fun_fact")
+        vision_try_this = vision_result.get("try_this")
+        vision_grade_level = vision_result.get("grade_level", "Grade 1.3")
 
     # Determine concept
     new_concept = detected_object or request.target_node_id or (
         request.explanation.strip() if request.explanation else "Wonder"
     )
     source_concept = request.source_node_id or session.current_node_id
+
+    # If text hop, provide educational discovery copy
+    if not vision_what_is_it:
+        vision_what_is_it = f"A {new_concept} is an intriguing part of our everyday world."
+        vision_fun_fact = f"Every {new_concept} has special links to science, nature, and human inventions!"
+        vision_try_this = f"Notice where you see or use a {new_concept} today."
+        vision_grade_level = "Grade 1.3"
 
     # Collect all prior discovered wonders on this session's canvas
     prior_wonders = [n.label for n in session.nodes] if session.nodes else [source_concept]
@@ -95,14 +111,17 @@ async def process_hop(
 
     verdict: HopVerdict = hop_result["verdict"]
     reason_text: str = hop_result["reason"]
-    connected_wonders: List[str] = hop_result.get("connected_wonders", [source_concept])
+    connected_wonders: List[str] = hop_result.get("connected_wonders", [])
+    connection_rule: Optional[str] = hop_result.get("connection_rule", None)
     bridges: List[str] = hop_result.get("resonance_bridges", [])
     evidence_urls: List[str] = hop_result.get("evidence_urls", [])
 
     # 4. Multi-Discovery Scoring
-    base_points = POINTS[verdict]
-    resonance_points = 0
+    # If in World Mode and no prior wonder connects and no bridges, it's an independent new wonder island (+25 pts)
+    is_independent_wonder = (request.mode == "world" and len(connected_wonders) == 0 and len(bridges) == 0)
+    base_points = 25 if is_independent_wonder else POINTS[verdict]
     resonance_count = max(len(bridges), max(0, len(connected_wonders) - 1))
+    resonance_points = 0
 
     if verdict != "rejected":
         session.hops_taken += 1
@@ -130,38 +149,68 @@ async def process_hop(
             label=new_concept.capitalize(),
             category=_infer_category(new_concept),
             description=detected_description or wiki.get("summary", ""),
+            what_is_it=vision_what_is_it,
+            fun_fact=vision_fun_fact,
+            try_this=vision_try_this,
+            grade_level=vision_grade_level,
             image_url=wiki.get("thumbnail"),
         )
 
         support_type: EdgeSupport = "established" if verdict == "established" else "association"
 
-        # Connect to primary source
-        new_edges.append(Edge(
-            source=source_concept.lower().replace(" ", "_"),
-            target=node_id,
-            relationship=active_explanation,
-            support=support_type,
-            evidence_urls=evidence_urls,
-        ))
-
-        # Connect to other resonant wonders discovered on the trail
-        for wonder in connected_wonders:
-            wonder_id = wonder.lower().replace(" ", "_")
-            if wonder_id != source_concept.lower().replace(" ", "_") and wonder_id != node_id:
-                new_edges.append(Edge(
-                    source=wonder_id,
-                    target=node_id,
-                    relationship=f"Resonance connection with {wonder}",
-                    support="resonance",
-                    evidence_urls=[],
-                ))
+        # In Quest mode: connect to source
+        if request.mode == "quest":
+            new_edges.append(Edge(
+                source=source_concept.lower().replace(" ", "_"),
+                target=node_id,
+                relationship=active_explanation,
+                support=support_type,
+                evidence_urls=evidence_urls,
+                connection_rule=connection_rule,
+            ))
+            for wonder in connected_wonders:
+                wonder_id = wonder.lower().replace(" ", "_")
+                if wonder_id != source_concept.lower().replace(" ", "_") and wonder_id != node_id:
+                    new_edges.append(Edge(
+                        source=wonder_id,
+                        target=node_id,
+                        relationship=f"Resonance connection with {wonder}",
+                        support="resonance",
+                        evidence_urls=[],
+                        connection_rule=connection_rule,
+                    ))
+        else:
+            # In World mode: connect to each connected wonder (or source if bridges exist)
+            targets_to_connect = connected_wonders if len(connected_wonders) > 0 else ([source_concept] if len(bridges) > 0 else [])
+            for wonder in targets_to_connect:
+                wonder_id = wonder.lower().replace(" ", "_")
+                if wonder_id != node_id:
+                    new_edges.append(Edge(
+                        source=wonder_id,
+                        target=node_id,
+                        relationship=active_explanation if wonder == targets_to_connect[0] else f"Resonance connection with {wonder}",
+                        support=support_type if wonder == targets_to_connect[0] else "resonance",
+                        evidence_urls=evidence_urls if wonder == targets_to_connect[0] else [],
+                        connection_rule=connection_rule,
+                    ))
+            for b in bridges:
+                b_id = b.lower().replace(" ", "_")
+                if b_id != node_id and all(e.source != b_id for e in new_edges):
+                    new_edges.append(Edge(
+                        source=b_id,
+                        target=node_id,
+                        relationship=f"Resonance bridge with {b}",
+                        support="resonance",
+                        evidence_urls=[],
+                        connection_rule=connection_rule,
+                    ))
 
         session.nodes.append(new_node)
         session.edges.extend(new_edges)
         session.current_node_id = node_id
 
     # 6. Badges
-    new_badges = _evaluate_badges(session, resonance_count)
+    new_badges = _evaluate_badges(session, verdict, resonance_count, request.mode)
 
     # 7. Quest Goal Completion check
     completed = False
@@ -196,6 +245,11 @@ async def process_hop(
         reason=reason_text,
         detected_object=detected_object,
         detected_description=detected_description or (new_node.description if new_node else None),
+        what_is_it=vision_what_is_it,
+        fun_fact=vision_fun_fact,
+        try_this=vision_try_this,
+        grade_level=vision_grade_level,
+        connection_rule=connection_rule,
         new_node=new_node,
         new_edges=new_edges,
         resonance_count=resonance_count,
@@ -205,57 +259,52 @@ async def process_hop(
         badges_unlocked=new_badges,
         completed=completed,
         eureka_graph=eureka_graph,
-        new_island_created=False,
+        new_island_created=is_independent_wonder,
     )
 
 
-def _evaluate_badges(
-    session: GameSession,
-    verdict: str = "association",
-    resonance_count: int = 0,
-    mode: str = "quest"
-) -> list[str]:
-    newly_unlocked = []
+def _evaluate_badges(session: GameSession, verdict: str = "", resonance_count: int = 0, mode: str = "quest") -> List[str]:
+    new = []
 
-    def unlock(key: str):
+    def award(key: str):
         if key not in session.badges:
             session.badges.append(key)
-            newly_unlocked.append(BADGE_DEFS[key])
+            new.append(BADGE_DEFS[key])
 
     if session.hops_taken == 1:
-        unlock("first_hop")
+        award("first_hop")
     if session.hops_taken >= 5:
-        unlock("chain_master")
+        award("chain_master")
     if session.consecutive_established >= 3:
-        unlock("einstein")
-    if resonance_count > 0:
-        unlock("bridge_builder")
-    if len(session.nodes) >= 4:
-        unlock("world_explorer")
+        award("einstein")
+    if resonance_count >= 1:
+        award("bridge_builder")
+    if len(session.nodes) >= 6:
+        award("world_explorer")
 
-    return newly_unlocked
+    return new
 
 
 def _infer_category(concept: str) -> str:
     c = concept.lower()
-    if any(w in c for w in ["plant", "animal", "bio", "cell", "photosyn", "ecosystem", "leaf"]):
+    if any(k in c for k in ["cell", "leaf", "plant", "organism", "tree", "flower", "photosynthesis", "bee"]):
         return "biology"
-    if any(w in c for w in ["sun", "star", "planet", "orbit", "space", "galaxy", "black hole", "moon"]):
+    if any(k in c for k in ["planet", "star", "sun", "space", "orbit", "galaxy", "black hole"]):
         return "astronomy"
-    if any(w in c for w in ["energy", "force", "gravity", "wave", "light", "heat", "electric", "solar"]):
+    if any(k in c for k in ["energy", "light", "wave", "atom", "gravity", "electron", "physics"]):
         return "physics"
-    if any(w in c for w in ["water", "acid", "molecule", "atom", "element", "chemical"]):
+    if any(k in c for k in ["molecule", "acid", "reaction", "water", "hydrogen", "chemistry"]):
         return "chemistry"
-    if any(w in c for w in ["robot", "computer", "ai", "code", "software", "panel", "car"]):
+    if any(k in c for k in ["computer", "code", "ai", "sensor", "robot", "network", "technology"]):
         return "technology"
     return "general"
 
 
-def _error_response(msg: str) -> HopResponse:
+def _error_response(message: str) -> HopResponse:
     return HopResponse(
         valid=False,
         verdict="rejected",
-        reason=msg,
+        reason=message,
+        points_awarded=0,
         total_points=0,
-        badges_unlocked=[],
     )

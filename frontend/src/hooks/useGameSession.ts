@@ -1,7 +1,7 @@
 import { useState, useCallback } from 'react'
 import { useNodesState, useEdgesState, type Node, type Edge } from '@xyflow/react'
 import confetti from 'canvas-confetti'
-import type { PlayMode, HopVerdict, EurekaGraph, GameNode, GameEdge } from '../types/game'
+import type { PlayMode, HopVerdict, EurekaGraph, GameNode, GameEdge, HopResponse } from '../types/game'
 import { createSession, submitHop, submitImageHop } from '../api/client'
 
 // Converts backend GameNode → React Flow Node
@@ -20,6 +20,10 @@ function toFlowNode(gNode: GameNode, index: number): Node {
       category: gNode.category,
       description: gNode.description,
       image_url: gNode.image_url,
+      what_is_it: gNode.what_is_it,
+      fun_fact: gNode.fun_fact,
+      try_this: gNode.try_this,
+      grade_level: gNode.grade_level,
     },
   }
 }
@@ -35,8 +39,8 @@ function toFlowEdge(gEdge: GameEdge): Edge {
     id: `${gEdge.source}-${gEdge.target}`,
     source: gEdge.source,
     target: gEdge.target,
-    label: gEdge.relationship.slice(0, 30),
-    style: { stroke: colorMap[gEdge.support] ?? '#a78bfa', strokeWidth: 2 },
+    label: (gEdge.relationship || '').slice(0, 32),
+    style: { stroke: colorMap[gEdge.support] ?? '#a78bfa', strokeWidth: 2.5 },
     animated: gEdge.support === 'established',
   }
 }
@@ -60,6 +64,10 @@ export function useGameSession() {
   const [lastPoints, setLastPoints] = useState(0)
   const [completed, setCompleted] = useState(false)
   const [eurekaGraph, setEurekaGraph] = useState<EurekaGraph | null>(null)
+
+  // Kid Discovery Card popup state
+  const [lastCardResponse, setLastCardResponse] = useState<HopResponse | null>(null)
+  const [isCardModalOpen, setIsCardModalOpen] = useState(false)
 
   const startSession = useCallback(async (
     m: PlayMode, seed: string, target?: string, levelNumber?: number
@@ -87,12 +95,14 @@ export function useGameSession() {
       setLastVerdict(null)
       setCompleted(false)
       setEurekaGraph(null)
+      setLastCardResponse(null)
+      setIsCardModalOpen(false)
     } finally {
       setLoading(false)
     }
   }, [setNodes, setEdges])
 
-  const applyHopResponse = useCallback((res: Awaited<ReturnType<typeof submitHop>>) => {
+  const applyHopResponse = useCallback((res: HopResponse) => {
     setLastVerdict(res.verdict)
     setLastReason(res.reason)
     setLastPoints(res.points_awarded)
@@ -106,11 +116,26 @@ export function useGameSession() {
 
     if (res.new_node) {
       const idx = nodes.length
-      setNodes(ns => [...ns, toFlowNode(res.new_node!, idx)])
+      setNodes(ns => {
+        // Prevent duplicate node IDs
+        if (ns.some(n => n.id === res.new_node!.id)) return ns
+        return [...ns, toFlowNode(res.new_node!, idx)]
+      })
       setCurrentNode(res.new_node.id)
+
+      // Open kid discovery card
+      setLastCardResponse(res)
+      setIsCardModalOpen(true)
     }
-    if (res.new_edges.length > 0) {
-      setEdges(es => [...es, ...res.new_edges.map(toFlowEdge)])
+
+    if (res.new_edges && res.new_edges.length > 0) {
+      setEdges(es => {
+        const existingIds = new Set(es.map(e => e.id))
+        const newFlowEdges = res.new_edges
+          .map(toFlowEdge)
+          .filter(e => !existingIds.has(e.id))
+        return [...es, ...newFlowEdges]
+      })
     }
 
     // Quest Level completion and lock progression
@@ -145,6 +170,61 @@ export function useGameSession() {
       confetti({ particleCount: 200, spread: 90, origin: { y: 0.5 }, colors: ['#a78bfa','#22d3ee','#fbbf24', '#10b981'] })
     }
   }, [nodes, activeLevelNumber, setNodes, setEdges])
+
+  // ── Start discovery session directly from landing lens capture ──────────────
+  const startSessionWithImage = useCallback(async (file: File) => {
+    setLoading(true)
+    try {
+      const res = await createSession('world', 'Wonder', undefined)
+      setSessionId(res.session_id)
+      setMode('world')
+      setQuestTarget(undefined)
+      setActiveLevelNumber(null)
+      setNodes([])
+      setEdges([])
+      setTotalPoints(0)
+      setHopsCount(0)
+      setBadges([])
+      setCompleted(false)
+      setEurekaGraph(null)
+
+      const hopRes = await submitImageHop(
+        res.session_id,
+        'world',
+        'First wonder discovered through the lens!',
+        file
+      )
+
+      if (hopRes.new_node) {
+        const firstNode: Node = {
+          id: hopRes.new_node.id,
+          type: 'bubble',
+          position: { x: 400, y: 300 },
+          data: {
+            label: hopRes.new_node.label,
+            category: hopRes.new_node.category,
+            description: hopRes.new_node.description,
+            image_url: hopRes.new_node.image_url,
+            what_is_it: hopRes.what_is_it,
+            fun_fact: hopRes.fun_fact,
+            try_this: hopRes.try_this,
+            grade_level: hopRes.grade_level,
+          },
+        }
+        setNodes([firstNode])
+        setCurrentNode(hopRes.new_node.id)
+      }
+      setLastVerdict(hopRes.verdict)
+      setLastReason(hopRes.reason)
+      setLastPoints(hopRes.points_awarded)
+      setTotalPoints(hopRes.total_points)
+      setHopsCount(1)
+      setLastCardResponse(hopRes)
+      setIsCardModalOpen(true)
+    } finally {
+      setLoading(false)
+    }
+  }, [setNodes, setEdges])
 
   // ── Text hop: concept + explanation ─────────────────────────────────────────
   const handleTextHop = useCallback(async (concept: string, explanation: string) => {
@@ -190,6 +270,8 @@ export function useGameSession() {
     setEdges([])
     setCompleted(false)
     setEurekaGraph(null)
+    setLastCardResponse(null)
+    setIsCardModalOpen(false)
   }, [setNodes, setEdges])
 
   return {
@@ -198,6 +280,7 @@ export function useGameSession() {
     loading, totalPoints, hopsCount, badges,
     lastVerdict, lastReason, lastPoints,
     completed, eurekaGraph,
-    startSession, handleTextHop, handleImageHop, reset,
+    lastCardResponse, isCardModalOpen, setIsCardModalOpen,
+    startSession, startSessionWithImage, handleTextHop, handleImageHop, reset,
   }
 }

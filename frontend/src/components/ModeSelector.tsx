@@ -1,20 +1,116 @@
-import { useState } from 'react'
+import { useState, useRef, useEffect, useCallback } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
-import { Sparkles, ArrowRight, X, Compass } from 'lucide-react'
+import { ArrowRight, X, Camera, Upload, Info } from 'lucide-react'
 import type { PlayMode, QuestLevel } from '../types/game'
 import QuestJourneyModal from './QuestJourneyModal'
 
 interface Props {
   onStart: (mode: PlayMode, seed: string, target?: string, levelNumber?: number) => void
+  onCaptureImage?: (file: File) => void
+  loading?: boolean
 }
 
-export default function ModeSelector({ onStart }: Props) {
+export default function ModeSelector({ onStart, onCaptureImage, loading = false }: Props) {
   const [isJourneyModalOpen, setIsJourneyModalOpen] = useState(false)
   const [isOpenCustomModal, setIsOpenCustomModal] = useState(false)
+  const [isRulesModalOpen, setIsRulesModalOpen] = useState(false)
   const [seedInput, setSeedInput] = useState('')
   const [targetInput, setTargetInput] = useState('')
   const [hasTarget, setHasTarget] = useState(false)
   const [error, setError] = useState('')
+
+  // In-page camera state
+  const videoRef = useRef<HTMLVideoElement | null>(null)
+  const fileInputRef = useRef<HTMLInputElement | null>(null)
+  const [isCameraActive, setIsCameraActive] = useState(false)
+  const [stream, setStream] = useState<MediaStream | null>(null)
+  const [cameraError, setCameraError] = useState<string | null>(null)
+
+  const stopCamera = useCallback(() => {
+    if (stream) {
+      stream.getTracks().forEach(t => t.stop())
+      setStream(null)
+    }
+    setIsCameraActive(false)
+  }, [stream])
+
+  const startCamera = useCallback(async () => {
+    setCameraError(null)
+    try {
+      if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
+        throw new Error('Camera is not supported on this browser.')
+      }
+      const mediaStream = await navigator.mediaDevices.getUserMedia({
+        video: {
+          facingMode: { ideal: 'environment' },
+          width: { ideal: 1280 },
+          height: { ideal: 720 },
+        },
+        audio: false,
+      })
+      setStream(mediaStream)
+      setIsCameraActive(true)
+      if (videoRef.current) {
+        videoRef.current.srcObject = mediaStream
+        videoRef.current.play().catch(() => {})
+      }
+    } catch (err: any) {
+      console.warn('Camera access error:', err)
+      setCameraError(
+        err.name === 'NotAllowedError'
+          ? 'Camera permission denied. You can choose a photo from your files.'
+          : 'Unable to access live camera. Please use the Choose button.'
+      )
+      setIsCameraActive(false)
+    }
+  }, [])
+
+  useEffect(() => {
+    return () => {
+      stopCamera()
+    }
+  }, [stopCamera])
+
+  // Attach stream when video element becomes available
+  useEffect(() => {
+    if (isCameraActive && stream && videoRef.current) {
+      videoRef.current.srcObject = stream
+      videoRef.current.play().catch(() => {})
+    }
+  }, [isCameraActive, stream])
+
+  const handleSnap = () => {
+    const video = videoRef.current
+    if (!video) return
+
+    const canvas = document.createElement('canvas')
+    canvas.width = video.videoWidth || 640
+    canvas.height = video.videoHeight || 480
+    const ctx = canvas.getContext('2d')
+    if (!ctx) return
+
+    ctx.drawImage(video, 0, 0, canvas.width, canvas.height)
+    canvas.toBlob(
+      blob => {
+        if (!blob) return
+        const file = new File([blob], `discovery_snap_${Date.now()}.jpg`, { type: 'image/jpeg' })
+        stopCamera()
+        if (onCaptureImage) {
+          onCaptureImage(file)
+        }
+      },
+      'image/jpeg',
+      0.92
+    )
+  }
+
+  const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0]
+    if (file && onCaptureImage) {
+      stopCamera()
+      onCaptureImage(file)
+    }
+  }
 
   const handleSelectLevel = (level: QuestLevel) => {
     setIsJourneyModalOpen(false)
@@ -37,7 +133,7 @@ export default function ModeSelector({ onStart }: Props) {
   return (
     <div className="min-h-screen bg-[#FAF6EE] text-slate-800 flex flex-col items-center justify-start py-8 px-4 sm:px-6 relative">
       {/* Top Brand Pill Header */}
-      <div className="w-full max-w-4xl flex items-center justify-between mb-6">
+      <div className="w-full max-w-5xl flex items-center justify-between mb-6">
         <div className="flex items-center gap-2.5">
           <div className="w-10 h-10 rounded-2xl bg-orange-500 text-white flex items-center justify-center font-black text-xl shadow-md">
             🔍
@@ -51,114 +147,223 @@ export default function ModeSelector({ onStart }: Props) {
             </p>
           </div>
         </div>
+
+        {/* Guest explorer badge & connection rule button */}
+        <div className="flex items-center gap-2">
+          <button
+            onClick={() => setIsRulesModalOpen(true)}
+            className="px-3 py-1.5 bg-white border border-orange-200 hover:border-orange-400 rounded-full text-xs font-bold text-slate-700 shadow-sm transition-all cursor-pointer flex items-center gap-1.5"
+            title="Learn how wonders connect"
+          >
+            <Info size={14} className="text-orange-500" />
+            <span>Connection Rules</span>
+          </button>
+          <span className="hidden sm:inline-block px-3 py-1 bg-emerald-50 text-emerald-800 border border-emerald-200 rounded-full text-xs font-bold">
+            🌱 Guest Explorer Mode
+          </span>
+        </div>
       </div>
 
-      {/* Deep Ocean Blue Hero Card */}
-      <motion.div
-        initial={{ opacity: 0, y: -15 }}
-        animate={{ opacity: 1, y: 0 }}
-        className="w-full max-w-4xl bg-gradient-to-r from-[#17385E] via-[#1E4574] to-[#17385E] text-white rounded-3xl p-8 sm:p-10 mb-8 shadow-xl relative overflow-hidden"
-      >
-        <div className="absolute right-0 top-0 bottom-0 w-1/3 bg-white/5 rounded-l-full pointer-events-none" />
-        <div className="relative z-10 max-w-xl">
-          <div className="inline-flex items-center gap-2 bg-white/10 backdrop-blur-sm px-3.5 py-1 rounded-full text-xs font-bold text-orange-300 mb-4 border border-white/10">
-            <Sparkles size={13} className="text-yellow-300" />
-            <span>15 Progressive Discovery Levels</span>
+      {/* Main 2-Column Discovery Experience (Reference Images 3 & 4) */}
+      <div className="w-full max-w-5xl grid grid-cols-1 lg:grid-cols-2 gap-6 mb-8">
+        {/* LEFT COLUMN: Look Through Your Lens (Camera Viewfinder Card) */}
+        <motion.div
+          initial={{ opacity: 0, y: 15 }}
+          animate={{ opacity: 1, y: 0 }}
+          className="bg-white border-2 border-orange-100 rounded-3xl p-6 sm:p-7 shadow-sm flex flex-col justify-between"
+        >
+          <div>
+            {/* Header tag and icon */}
+            <div className="flex items-center justify-between mb-2">
+              <span className="text-[11px] font-black uppercase tracking-wider text-amber-700 font-sans">
+                BEST WAY TO BEGIN
+              </span>
+              <div className="w-9 h-9 rounded-2xl bg-amber-50 text-amber-700 flex items-center justify-center text-sm shadow-inner">
+                📷
+              </div>
+            </div>
+
+            <h2 className="text-2xl sm:text-3xl font-black text-slate-900 tracking-tight mb-1">
+              Look through your lens
+            </h2>
+            <p className="text-xs sm:text-sm font-medium text-slate-500 mb-5">
+              Point at one interesting thing and let's explore it together.
+            </p>
+
+            {/* Viewfinder Area */}
+            <div className="relative w-full aspect-[4/3] sm:aspect-[16/11] bg-slate-900 rounded-3xl overflow-hidden shadow-inner flex items-center justify-center mb-5 border-4 border-slate-900/10">
+              {isCameraActive ? (
+                <>
+                  <video
+                    ref={videoRef}
+                    autoPlay
+                    playsInline
+                    muted
+                    className="w-full h-full object-cover"
+                  />
+                  <div className="absolute top-3 left-3 bg-red-600/90 text-white text-[11px] font-bold px-2.5 py-1 rounded-full flex items-center gap-1.5 shadow backdrop-blur-sm">
+                    <span className="w-2 h-2 rounded-full bg-white animate-ping" />
+                    <span>Live Lens</span>
+                  </div>
+                </>
+              ) : (
+                <div className="flex flex-col items-center justify-center text-center p-6 text-white">
+                  <div className="w-14 h-14 rounded-3xl bg-white/10 flex items-center justify-center text-2xl mb-3 shadow-inner">
+                    ✨📸
+                  </div>
+                  <h3 className="text-base sm:text-lg font-black text-white mb-1">
+                    Ready when you are!
+                  </h3>
+                  <p className="text-xs text-slate-400 font-medium max-w-xs">
+                    Turn on your live camera or choose a picture from your files.
+                  </p>
+                </div>
+              )}
+
+              {/* In-viewfinder camera error */}
+              {cameraError && (
+                <div className="absolute bottom-3 left-3 right-3 bg-red-900/90 text-white text-xs p-2.5 rounded-xl text-center">
+                  {cameraError}
+                </div>
+              )}
+            </div>
           </div>
-          <h2 className="text-3xl sm:text-4xl font-black leading-tight mb-3">
-            What will we discover today?
-          </h2>
-          <p className="text-slate-200 text-sm sm:text-base leading-relaxed mb-6 font-medium">
-            Step through 15 progressive levels or snap photos of real-world objects to build your interactive discovery map!
-          </p>
-          <div className="flex flex-wrap items-center gap-3">
+
+          {/* Action Buttons Below Viewfinder */}
+          <div className="flex items-center gap-3">
+            {isCameraActive ? (
+              <button
+                type="button"
+                onClick={handleSnap}
+                disabled={loading}
+                className="flex-1 py-3.5 px-6 bg-blue-600 hover:bg-blue-700 active:scale-[0.98] text-white font-black text-sm rounded-2xl shadow-lg transition-all cursor-pointer flex items-center justify-center gap-2 border-b-4 border-blue-800"
+              >
+                <Camera size={18} />
+                <span>{loading ? 'Discovering...' : 'Snap!'}</span>
+              </button>
+            ) : (
+              <button
+                type="button"
+                onClick={startCamera}
+                disabled={loading}
+                className="flex-1 py-3.5 px-6 bg-blue-600 hover:bg-blue-700 active:scale-[0.98] text-white font-black text-sm rounded-2xl shadow-lg transition-all cursor-pointer flex items-center justify-center gap-2 border-b-4 border-blue-800"
+              >
+                <Camera size={18} />
+                <span>Turn on camera</span>
+              </button>
+            )}
+
             <button
+              type="button"
+              onClick={() => fileInputRef.current?.click()}
+              disabled={loading}
+              className="flex-1 py-3.5 px-6 bg-slate-600 hover:bg-slate-700 active:scale-[0.98] text-white font-black text-sm rounded-2xl shadow-md transition-all cursor-pointer flex items-center justify-center gap-2"
+            >
+              <Upload size={18} />
+              <span>Choose</span>
+            </button>
+            <input
+              type="file"
+              ref={fileInputRef}
+              accept="image/*"
+              onChange={handleFileChange}
+              className="hidden"
+            />
+          </div>
+        </motion.div>
+
+        {/* RIGHT COLUMN: Discovery Map Card */}
+        <motion.div
+          initial={{ opacity: 0, y: 15 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ delay: 0.1 }}
+          className="bg-white border-2 border-orange-100 rounded-3xl p-6 sm:p-7 shadow-sm flex flex-col justify-between"
+        >
+          <div>
+            {/* Header tag and icon */}
+            <div className="flex items-center justify-between mb-2">
+              <span className="text-[11px] font-black uppercase tracking-wider text-orange-700 font-sans">
+                YOUR LEARNING TRAIL
+              </span>
+              <div className="w-9 h-9 rounded-2xl bg-amber-50 text-amber-500 flex items-center justify-center text-sm shadow-inner">
+                ✨
+              </div>
+            </div>
+
+            <h2 className="text-2xl sm:text-3xl font-black text-slate-900 tracking-tight mb-1">
+              Discovery Map
+            </h2>
+            <p className="text-xs sm:text-sm font-medium text-slate-500 mb-5">
+              Choose a wonder or climb through the 15 progressive quest levels!
+            </p>
+
+            {/* In-box Question Card */}
+            <div className="bg-[#FAF6EE] border-2 border-dashed border-amber-200/80 rounded-2xl p-4 sm:p-5 mb-5 flex items-start gap-3">
+              <div className="w-10 h-10 rounded-2xl bg-white text-orange-600 flex items-center justify-center text-xl shrink-0 shadow-sm">
+                🧭
+              </div>
+              <div>
+                <h3 className="text-sm font-black text-slate-900 leading-tight mb-1">
+                  Your map starts with a question
+                </h3>
+                <p className="text-xs font-medium text-slate-600 leading-relaxed">
+                  Explore an object and we'll connect it to related ideas. Each connection gives you discovery points!
+                </p>
+              </div>
+            </div>
+
+            {/* 4 Connection Rules Preview */}
+            <div className="mb-6">
+              <h4 className="text-xs font-black uppercase tracking-wider text-slate-500 mb-2.5">
+                How Wonders Connect:
+              </h4>
+              <div className="grid grid-cols-2 gap-2 text-xs">
+                <div className="p-2.5 bg-sky-50 border border-sky-100 rounded-xl">
+                  <span className="font-bold text-sky-900 block mb-0.5">🌿 Material</span>
+                  <span className="text-slate-600 text-[11px]">Tree ➔ Paper ➔ Book</span>
+                </div>
+                <div className="p-2.5 bg-amber-50 border border-amber-100 rounded-xl">
+                  <span className="font-bold text-amber-900 block mb-0.5">⚙️ Teamwork</span>
+                  <span className="text-slate-600 text-[11px]">Pen & Paper, Spoon & Bowl</span>
+                </div>
+                <div className="p-2.5 bg-orange-50 border border-orange-100 rounded-xl">
+                  <span className="font-bold text-orange-900 block mb-0.5">⚡ Energy</span>
+                  <span className="text-slate-600 text-[11px]">Sun ➔ Plant, Ice ➔ Water</span>
+                </div>
+                <div className="p-2.5 bg-emerald-50 border border-emerald-100 rounded-xl">
+                  <span className="font-bold text-emerald-900 block mb-0.5">🐝 Habitat</span>
+                  <span className="text-slate-600 text-[11px]">Bee & Flower, Bird & Nest</span>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          {/* Quest Ladder CTA */}
+          <div className="space-y-2.5">
+            <button
+              type="button"
               onClick={() => setIsJourneyModalOpen(true)}
-              className="px-6 py-3.5 bg-orange-500 hover:bg-orange-600 active:translate-y-0.5 text-white font-black text-sm rounded-2xl shadow-lg border-b-4 border-orange-700 active:border-b-0 transition-all cursor-pointer flex items-center gap-2"
+              className="w-full py-3.5 px-6 bg-orange-500 hover:bg-orange-600 active:translate-y-0.5 text-white font-black text-sm rounded-2xl shadow-lg border-b-4 border-orange-700 active:border-b-0 transition-all cursor-pointer flex items-center justify-center gap-2"
             >
               <span>Play Quest Ladder (Levels 1–15)</span>
               <ArrowRight size={16} />
             </button>
+
             <button
-              onClick={() => onStart('world', 'Flower')}
-              className="px-5 py-3.5 bg-white/15 hover:bg-white/25 text-white font-bold text-sm rounded-2xl backdrop-blur-sm transition-all cursor-pointer flex items-center gap-2"
+              type="button"
+              onClick={() => {
+                setSeedInput('')
+                setTargetInput('')
+                setHasTarget(false)
+                setError('')
+                setIsOpenCustomModal(true)
+              }}
+              className="w-full py-2.5 text-xs font-bold text-slate-500 hover:text-orange-600 transition-colors cursor-pointer text-center"
             >
-              <span>📷 Free Photo Discovery</span>
+              Or start with a custom seed concept...
             </button>
           </div>
-        </div>
-      </motion.div>
-
-      {/* Two Main Cards: Quest Ladder vs Free Exploration */}
-      <div className="w-full max-w-4xl grid grid-cols-1 md:grid-cols-2 gap-5 mb-8">
-        {/* Card 1: 15-Level Quest Ladder */}
-        <motion.div
-          whileHover={{ scale: 1.01 }}
-          onClick={() => setIsJourneyModalOpen(true)}
-          className="bg-white border-2 border-orange-100 hover:border-orange-300 rounded-3xl p-6 shadow-sm hover:shadow-md transition-all cursor-pointer flex flex-col justify-between"
-        >
-          <div>
-            <div className="flex items-center justify-between mb-3">
-              <span className="text-[11px] font-black uppercase tracking-wider text-orange-600 bg-orange-50 px-3 py-1 rounded-full">
-                RECOMMENDED · 15 LEVELS
-              </span>
-              <span className="text-2xl">🗺️</span>
-            </div>
-            <h3 className="text-xl font-black text-slate-900 mb-1">
-              Quest Journey Ladder
-            </h3>
-            <p className="text-xs text-slate-600 leading-relaxed">
-              Start with simple 1-hop discoveries like 🌸 Flower ➔ 🐝 Bee, and progress level-by-level to cosmic science!
-            </p>
-          </div>
-          <div className="mt-5 pt-4 border-t border-slate-100 flex items-center gap-2 text-xs font-bold text-orange-600">
-            <span>Open Level Map</span>
-            <ArrowRight size={14} />
-          </div>
         </motion.div>
-
-        {/* Card 2: Free Exploration & Lens Mode */}
-        <motion.div
-          whileHover={{ scale: 1.01 }}
-          onClick={() => onStart('world', 'Flower')}
-          className="bg-white border-2 border-orange-100 hover:border-orange-300 rounded-3xl p-6 shadow-sm hover:shadow-md transition-all cursor-pointer flex flex-col justify-between"
-        >
-          <div>
-            <div className="flex items-center justify-between mb-3">
-              <span className="text-[11px] font-black uppercase tracking-wider text-sky-700 bg-sky-50 px-3 py-1 rounded-full">
-                CAMERA & SNAP MODE
-              </span>
-              <span className="text-2xl">📸</span>
-            </div>
-            <h3 className="text-xl font-black text-slate-900 mb-1">
-              Free Photo Discovery
-            </h3>
-            <p className="text-xs text-slate-600 leading-relaxed">
-              Take a live camera snap or upload any photo from your room or web. AI auto-captions it and connects it to your map!
-            </p>
-          </div>
-          <div className="mt-5 pt-4 border-t border-slate-100 flex items-center gap-2 text-xs font-bold text-sky-700">
-            <span>Explore Freely</span>
-            <ArrowRight size={14} />
-          </div>
-        </motion.div>
-      </div>
-
-      {/* Custom Topic Trigger */}
-      <div className="w-full max-w-4xl text-center">
-        <button
-          onClick={() => {
-            setSeedInput('')
-            setTargetInput('')
-            setHasTarget(false)
-            setError('')
-            setIsOpenCustomModal(true)
-          }}
-          className="text-xs font-bold text-slate-500 hover:text-orange-600 transition-colors cursor-pointer inline-flex items-center gap-1.5"
-        >
-          <Compass size={14} />
-          <span>Or create your own custom seed wonder & destination...</span>
-        </button>
       </div>
 
       {/* 15-LEVEL QUEST JOURNEY MODAL */}
@@ -167,6 +372,67 @@ export default function ModeSelector({ onStart }: Props) {
         onClose={() => setIsJourneyModalOpen(false)}
         onSelectLevel={handleSelectLevel}
       />
+
+      {/* CONNECTION RULES EXPLANATION MODAL */}
+      <AnimatePresence>
+        {isRulesModalOpen && (
+          <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/60 backdrop-blur-sm p-4">
+            <motion.div
+              initial={{ opacity: 0, scale: 0.95 }}
+              animate={{ opacity: 1, scale: 1 }}
+              exit={{ opacity: 0, scale: 0.95 }}
+              className="bg-white border-2 border-orange-200 rounded-3xl p-6 sm:p-7 max-w-lg w-full shadow-2xl relative"
+            >
+              <button
+                type="button"
+                onClick={() => setIsRulesModalOpen(false)}
+                className="absolute top-4 right-4 text-slate-400 hover:text-slate-800 p-1.5 rounded-full cursor-pointer hover:bg-slate-100 transition-colors"
+              >
+                <X size={18} />
+              </button>
+
+              <div className="flex items-center gap-3 mb-4">
+                <div className="w-11 h-11 rounded-2xl bg-orange-100 text-orange-600 flex items-center justify-center text-xl shadow-inner">
+                  ✨
+                </div>
+                <div>
+                  <h3 className="text-lg font-black text-slate-900 leading-tight">
+                    The 4 SutraVesh Connection Rules
+                  </h3>
+                  <p className="text-xs text-slate-500">How objects earn links and bonus points on your map</p>
+                </div>
+              </div>
+
+              <div className="space-y-3 mb-6 text-xs text-slate-700 leading-relaxed">
+                <div className="p-3 bg-sky-50 border border-sky-100 rounded-2xl">
+                  <h4 className="font-black text-sky-900 text-sm mb-1">🌿 1. Material & Ingredients ("Made From")</h4>
+                  <p>When an object is made from, derived from, or contains another wonder. For example: <strong>Tree ➔ Paper ➔ Book</strong>, or <strong>Flour ➔ Bread</strong>.</p>
+                </div>
+                <div className="p-3 bg-amber-50 border border-amber-100 rounded-2xl">
+                  <h4 className="font-black text-amber-900 text-sm mb-1">⚙️ 2. Purpose & Teamwork ("Used Together")</h4>
+                  <p>When two objects work together to solve a task or play. For example: <strong>Pen & Paper</strong>, <strong>Lock & Key</strong>, or <strong>Bat & Ball</strong>.</p>
+                </div>
+                <div className="p-3 bg-orange-50 border border-orange-100 rounded-2xl">
+                  <h4 className="font-black text-orange-900 text-sm mb-1">⚡ 3. Energy & Transformation ("Powers or Changes")</h4>
+                  <p>When one wonder fuels, heats, cools, or changes into another. For example: <strong>Sun ➔ Plant</strong>, <strong>Water ➔ Ice</strong>, or <strong>Fire ➔ Ash</strong>.</p>
+                </div>
+                <div className="p-3 bg-emerald-50 border border-emerald-100 rounded-2xl">
+                  <h4 className="font-black text-emerald-900 text-sm mb-1">🐝 4. Habitat & Ecosystem ("Lives Together")</h4>
+                  <p>When objects exist together naturally in the wild or everyday habitat. For example: <strong>Bee & Flower</strong>, <strong>Bird & Nest</strong>, or <strong>Fish & Ocean</strong>.</p>
+                </div>
+              </div>
+
+              <button
+                type="button"
+                onClick={() => setIsRulesModalOpen(false)}
+                className="w-full py-3 bg-orange-500 hover:bg-orange-600 text-white font-black text-xs rounded-2xl shadow transition-colors cursor-pointer"
+              >
+                Got it! Let's explore
+              </button>
+            </motion.div>
+          </div>
+        )}
+      </AnimatePresence>
 
       {/* CUSTOM WONDER MODAL */}
       <AnimatePresence>
@@ -194,65 +460,66 @@ export default function ModeSelector({ onStart }: Props) {
                   <h3 className="text-lg font-black text-slate-900 leading-tight">
                     Custom Discovery Topic
                   </h3>
-                  <p className="text-xs text-slate-500">Pick any custom concept you wish to explore</p>
+                  <p className="text-xs text-slate-500">Pick any concept you wish to explore</p>
                 </div>
               </div>
 
-              {error && (
-                <div className="mb-4 p-3 bg-rose-50 border border-rose-200 text-rose-700 text-xs rounded-2xl font-medium">
-                  {error}
-                </div>
-              )}
-
-              <form onSubmit={handleStartCustomGame} className="flex flex-col gap-4">
+              <form onSubmit={handleStartCustomGame} className="space-y-4">
                 <div>
-                  <label className="text-xs font-bold text-slate-700 block mb-1.5">
-                    Starting Wonder
+                  <label className="block text-xs font-bold text-slate-700 mb-1.5">
+                    Starting Wonder Concept
                   </label>
                   <input
                     type="text"
-                    required
                     value={seedInput}
                     onChange={e => setSeedInput(e.target.value)}
-                    placeholder="e.g. Leaf, Sun, Volcano, Water..."
-                    className="w-full bg-[#FAF6EE] text-slate-900 text-xs px-3.5 py-3 rounded-2xl border-2 border-orange-100 focus:outline-none focus:border-orange-500 font-bold"
+                    placeholder="e.g. Telescope, Honeybee, Volcano..."
+                    className="w-full px-4 py-3 bg-slate-50 border-2 border-slate-200 focus:border-orange-500 rounded-2xl text-sm font-semibold outline-none transition-all"
+                    autoFocus
                   />
                 </div>
 
-                <div className="p-3 bg-orange-50/60 rounded-2xl border border-orange-100">
-                  <div className="flex items-center justify-between mb-2">
-                    <span className="text-xs font-bold text-slate-700">
-                      Add a Destination Goal? (Optional)
+                <div className="pt-2">
+                  <label className="flex items-center gap-2 cursor-pointer select-none">
+                    <input
+                      type="checkbox"
+                      checked={hasTarget}
+                      onChange={e => setHasTarget(e.target.checked)}
+                      className="w-4 h-4 rounded text-orange-500 accent-orange-500"
+                    />
+                    <span className="text-xs font-bold text-slate-600">
+                      Set a specific destination wonder (Quest Mode)
                     </span>
-                    <button
-                      type="button"
-                      onClick={() => setHasTarget(!hasTarget)}
-                      className={`text-[11px] font-black px-2.5 py-0.5 rounded-full transition-colors cursor-pointer ${
-                        hasTarget
-                          ? 'bg-orange-500 text-white'
-                          : 'bg-slate-200 text-slate-600'
-                      }`}
-                    >
-                      {hasTarget ? 'Goal On 🎯' : 'Free Explore'}
-                    </button>
-                  </div>
+                  </label>
+                </div>
 
-                  {hasTarget && (
+                {hasTarget && (
+                  <div>
+                    <label className="block text-xs font-bold text-slate-700 mb-1.5">
+                      Target Destination Concept
+                    </label>
                     <input
                       type="text"
                       value={targetInput}
                       onChange={e => setTargetInput(e.target.value)}
-                      placeholder="e.g. Solar Panel, Plant, Electricity..."
-                      className="w-full bg-white text-slate-900 text-xs px-3 py-2.5 rounded-xl border-2 border-orange-200 focus:outline-none focus:border-orange-500 font-bold mt-1"
+                      placeholder="e.g. Star, Forest, Diamond..."
+                      className="w-full px-4 py-3 bg-slate-50 border-2 border-slate-200 focus:border-orange-500 rounded-2xl text-sm font-semibold outline-none transition-all"
                     />
-                  )}
-                </div>
+                  </div>
+                )}
+
+                {error && (
+                  <p className="text-xs text-red-500 font-semibold bg-red-50 p-2.5 rounded-xl">
+                    {error}
+                  </p>
+                )}
 
                 <button
                   type="submit"
-                  className="mt-2 w-full py-3.5 bg-orange-500 hover:bg-orange-600 active:translate-y-0.5 text-white font-black text-sm rounded-2xl shadow-lg border-b-4 border-orange-700 active:border-b-0 transition-all cursor-pointer flex items-center justify-center gap-2"
+                  className="w-full py-3.5 bg-orange-500 hover:bg-orange-600 active:translate-y-0.5 text-white font-black text-sm rounded-2xl shadow-md border-b-4 border-orange-700 active:border-b-0 transition-all cursor-pointer flex items-center justify-center gap-2 mt-4"
                 >
-                  <span>Begin Adventure! 🚀</span>
+                  <span>Start Exploring</span>
+                  <ArrowRight size={16} />
                 </button>
               </form>
             </motion.div>

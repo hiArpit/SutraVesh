@@ -93,6 +93,21 @@ async def test_vision_success_with_educational_description():
     assert result["concept"] == "desk lamp"
     assert "electricity" in result["description"]
 
+@pytest.mark.asyncio
+async def test_vision_success_with_discovery_card_fields():
+    mock_client = MagicMock()
+    mock_client.chat.completions.create.return_value = _mock_completion(
+        '{"concept": "Book", "what_is_it": "A book is a long story with paper pages.", "fun_fact": "The oldest printed book is over 1000 years old!", "try_this": "Feel how the cover folds.", "grade_level": "Grade 1.3", "confidence": "high"}'
+    )
+    with patch("app.services.groq_service._get_client", return_value=mock_client):
+        result = await identify_concept_from_image(b"fake_book_bytes")
+    assert result["fallback"] is False
+    assert result["concept"] == "Book"
+    assert "paper pages" in result["what_is_it"]
+    assert "1000 years" in result["fun_fact"]
+    assert "cover folds" in result["try_this"]
+    assert result["grade_level"] == "Grade 1.3"
+
 
 @pytest.mark.asyncio
 async def test_vision_handles_markdown_wrapped_json():
