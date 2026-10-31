@@ -111,3 +111,24 @@ export async function discoverConcepts(sessionId: string, seed: string) {
   )
   return data as { seed_node: GameNode; related_nodes: GameNode[]; edges: GameEdge[] }
 }
+
+// ── Quest Levels APIs ────────────────────────────────────────────────────────
+export async function listQuestLevelsApi() {
+  const { data } = await axios.get(`${BASE}/quests/levels`)
+  return data as { levels: import('../types/game').QuestLevel[]; total_levels: number }
+}
+
+export async function startQuestLevelApi(levelNumber: number) {
+  const { data } = await axios.post(`${BASE}/quests/start-level`, {
+    level_number: levelNumber,
+  })
+  return data as {
+    session_id: string
+    level_number: number
+    title: string
+    mode: PlayMode
+    starting_seed: string
+    quest_target?: string | null
+    clues: string[]
+  }
+}

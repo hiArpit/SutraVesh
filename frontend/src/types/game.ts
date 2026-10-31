@@ -58,3 +58,18 @@ export interface SessionState {
   badges: string[]
   completed: boolean
 }
+
+export interface QuestLevel {
+  level_number: number
+  tier: number
+  tier_name: string
+  title: string
+  description: string
+  starting_seed: string
+  target_wonder?: string | null
+  emoji: string
+  target_emoji?: string | null
+  required_hops: number
+  clues: string[]
+  stars_reward: number
+}
