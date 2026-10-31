@@ -2,6 +2,7 @@ import os
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from app.core.config import settings
+from app.api.routes import router
 
 app = FastAPI(
     title=settings.PROJECT_NAME,
@@ -17,6 +18,9 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+# Mount all game routes
+app.include_router(router)
 
 @app.get("/api/health")
 async def health_check():
