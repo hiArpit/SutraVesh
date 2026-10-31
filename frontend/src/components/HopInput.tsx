@@ -1,6 +1,6 @@
 import { useState, useRef } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
-import { Camera, Send, Loader2, X } from 'lucide-react'
+import { Camera, Send, Loader2, X, Sparkles } from 'lucide-react'
 import type { PlayMode } from '../types/game'
 
 interface Props {
@@ -46,8 +46,8 @@ export default function HopInput({
   const handleSubmit = async () => {
     if (loading || disabled) return
     if (imageFile) {
-      if (!explanation.trim()) return
-      await onImageHop(explanation.trim(), imageFile)
+      // Photo hop: explanation is completely optional!
+      await onImageHop(explanation.trim() || `Discovered object in environment`, imageFile)
     } else {
       if (!concept.trim() || !explanation.trim()) return
       await onTextHop(concept.trim(), explanation.trim())
@@ -63,6 +63,8 @@ export default function HopInput({
       handleSubmit()
     }
   }
+
+  const canSubmit = imageFile ? true : (concept.trim() && explanation.trim())
 
   return (
     <motion.div
@@ -81,39 +83,45 @@ export default function HopInput({
         )}
       </div>
 
-      {/* Quick Clue Chips */}
-      <div className="flex flex-wrap gap-1.5 justify-center mb-2">
-        {CLUE_CHIPS.map(chip => (
-          <button
-            key={chip}
-            type="button"
-            onClick={() => setExplanation(prev => (prev ? `${prev} · ${chip}` : chip))}
-            className="text-[11px] bg-slate-800/80 hover:bg-violet-900/60 border border-slate-700 hover:border-violet-500 text-slate-300 px-2.5 py-0.5 rounded-full transition-all cursor-pointer"
-          >
-            {chip}
-          </button>
-        ))}
-      </div>
+      {/* Quick Clue Chips (only when typing) */}
+      {!imageFile && (
+        <div className="flex flex-wrap gap-1.5 justify-center mb-2">
+          {CLUE_CHIPS.map(chip => (
+            <button
+              key={chip}
+              type="button"
+              onClick={() => setExplanation(prev => (prev ? `${prev} · ${chip}` : chip))}
+              className="text-[11px] bg-slate-800/80 hover:bg-violet-900/60 border border-slate-700 hover:border-violet-500 text-slate-300 px-2.5 py-0.5 rounded-full transition-all cursor-pointer"
+            >
+              {chip}
+            </button>
+          ))}
+        </div>
+      )}
 
-      {/* Image preview */}
+      {/* Image preview banner */}
       <AnimatePresence>
         {imagePreview && (
           <motion.div
             initial={{ opacity: 0, scale: 0.8 }}
             animate={{ opacity: 1, scale: 1 }}
             exit={{ opacity: 0, scale: 0.8 }}
-            className="relative inline-block mb-2"
+            className="flex items-center gap-3 bg-violet-950/80 border border-violet-500/60 rounded-2xl p-2.5 mb-2 shadow-xl"
           >
             <img
               src={imagePreview}
               alt="preview"
-              className="h-16 w-16 rounded-xl object-cover border-2 border-violet-500 shadow-lg"
+              className="h-14 w-14 rounded-xl object-cover border border-violet-400 shadow-md"
             />
+            <div className="text-xs text-left">
+              <p className="font-bold text-violet-200">Photo Ready for AI Discovery!</p>
+              <p className="text-[11px] text-slate-400">Click &quot;DISCOVER NOW&quot; below or add an optional note</p>
+            </div>
             <button
               onClick={clearImage}
-              className="absolute -top-2 -right-2 bg-rose-500 hover:bg-rose-600 text-white rounded-full p-0.5 shadow-md"
+              className="ml-auto bg-rose-500/80 hover:bg-rose-500 text-white rounded-full p-1 cursor-pointer transition-colors"
             >
-              <X size={12} />
+              <X size={14} />
             </button>
           </motion.div>
         )}
@@ -140,35 +148,50 @@ export default function HopInput({
           onChange={handleImage}
         />
 
-        {!imageFile && (
+        {!imageFile ? (
+          <>
+            <input
+              type="text"
+              value={concept}
+              onChange={e => setConcept(e.target.value)}
+              onKeyDown={handleKey}
+              placeholder="Hop to (e.g. Sunlight)..."
+              className="w-44 bg-slate-800 text-white placeholder-slate-400 text-xs font-semibold px-3 py-2 rounded-xl border border-slate-700 focus:outline-none focus:border-violet-400"
+            />
+            <input
+              type="text"
+              value={explanation}
+              onChange={e => setExplanation(e.target.value)}
+              onKeyDown={handleKey}
+              placeholder="Why does it connect? (e.g. Reflects light)"
+              className="flex-1 bg-transparent text-sm text-white placeholder-slate-400 px-2 outline-none"
+            />
+          </>
+        ) : (
           <input
             type="text"
-            value={concept}
-            onChange={e => setConcept(e.target.value)}
+            value={explanation}
+            onChange={e => setExplanation(e.target.value)}
             onKeyDown={handleKey}
-            placeholder="Hop to (e.g. Sunlight)..."
-            className="w-44 bg-slate-800 text-white placeholder-slate-400 text-xs font-semibold px-3 py-2 rounded-xl border border-slate-700 focus:outline-none focus:border-violet-400"
+            placeholder="Optional note about this photo (or just click Discover!)..."
+            className="flex-1 bg-transparent text-sm text-white placeholder-slate-400 px-2 outline-none"
           />
         )}
 
-        <input
-          type="text"
-          value={explanation}
-          onChange={e => setExplanation(e.target.value)}
-          onKeyDown={handleKey}
-          placeholder={imageFile ? "Explain how photo connects to " + currentNode : "Why does it connect? (e.g. Reflects light)"}
-          className="flex-1 bg-transparent text-sm text-white placeholder-slate-400 px-2 outline-none"
-        />
-
-        {/* Send Action */}
+        {/* Action Button */}
         <button
           type="button"
           onClick={handleSubmit}
-          disabled={(imageFile ? !explanation.trim() : (!concept.trim() || !explanation.trim())) || loading || disabled}
-          className="px-4 py-2 bg-gradient-to-r from-violet-600 to-indigo-600 hover:from-violet-500 hover:to-indigo-500 text-white rounded-xl font-bold text-xs flex items-center gap-1.5 shadow-md active:scale-95 transition-all cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed"
+          disabled={!canSubmit || loading || disabled}
+          className="px-4 py-2.5 bg-gradient-to-r from-violet-600 to-indigo-600 hover:from-violet-500 hover:to-indigo-500 text-white rounded-xl font-bold text-xs flex items-center gap-1.5 shadow-md active:scale-95 transition-all cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed"
         >
           {loading ? (
             <Loader2 size={16} className="animate-spin" />
+          ) : imageFile ? (
+            <>
+              <Sparkles size={14} className="text-yellow-300" />
+              <span>DISCOVER NOW!</span>
+            </>
           ) : (
             <>
               <span>HOP!</span>
