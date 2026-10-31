@@ -156,7 +156,7 @@ async def test_hop_grounding_prompt_contains_wiki_text():
          patch("app.services.groq_service.fetch_wiki_summary", side_effect=fake_wiki):
         await evaluate_hop("sun", "photosynthesis", "sun gives energy")
 
-    prompt_text = captured_prompt["messages"][0]["content"]
+    prompt_text = " ".join([m["content"] for m in captured_prompt["messages"]])
     # The Wikipedia summaries MUST appear in the prompt
     assert "star at the center of the Solar System" in prompt_text
     assert "convert light energy into chemical energy" in prompt_text
