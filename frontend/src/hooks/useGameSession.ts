@@ -1,40 +1,38 @@
 import { useState, useCallback } from 'react'
-import { useNodesState, useEdgesState } from '@xyflow/react'
-import type { Node, Edge } from '@xyflow/react'
+import { useNodesState, useEdgesState, type Node, type Edge } from '@xyflow/react'
 import confetti from 'canvas-confetti'
-import { createSession, submitHop, submitImageHop } from '../api/client'
 import type { PlayMode, HopVerdict, EurekaGraph, GameNode, GameEdge } from '../types/game'
+import { createSession, submitHop, submitImageHop } from '../api/client'
 
-function nextPosition(index: number) {
-  const angle = index * 0.8
-  const radius = 130 + index * 55
-  return {
-    x: 400 + radius * Math.cos(angle),
-    y: 300 + radius * Math.sin(angle),
-  }
-}
-
+// Converts backend GameNode → React Flow Node
 function toFlowNode(gNode: GameNode, index: number): Node {
+  const angle = (index * 2 * Math.PI) / 6
+  const radius = 180 + Math.floor(index / 6) * 90
   return {
     id: gNode.id,
     type: 'bubble',
-    position: nextPosition(index),
+    position: {
+      x: 400 + radius * Math.cos(angle),
+      y: 300 + radius * Math.sin(angle),
+    },
     data: {
       label: gNode.label,
       category: gNode.category,
       description: gNode.description,
+      image_url: gNode.image_url,
     },
   }
 }
 
+// Converts backend GameEdge → React Flow Edge
 function toFlowEdge(gEdge: GameEdge): Edge {
   const colorMap: Record<string, string> = {
-    established: '#22d3ee',
-    association:  '#a78bfa',
-    resonance:    '#fb923c',
+    established: '#10b981', // emerald green
+    association: '#f59e0b', // amber yellow
+    resonance: '#38bdf8',   // light blue
   }
   return {
-    id: `${gEdge.source}-${gEdge.target}-${Date.now()}`,
+    id: `${gEdge.source}-${gEdge.target}`,
     source: gEdge.source,
     target: gEdge.target,
     label: gEdge.relationship.slice(0, 30),
@@ -47,6 +45,7 @@ export function useGameSession() {
   const [sessionId, setSessionId] = useState<string | null>(null)
   const [mode, setMode] = useState<PlayMode>('quest')
   const [questTarget, setQuestTarget] = useState<string | undefined>()
+  const [activeLevelNumber, setActiveLevelNumber] = useState<number | null>(null)
   const [currentNode, setCurrentNode] = useState<string>('')
 
   const [nodes, setNodes, onNodesChange] = useNodesState<Node>([])
@@ -63,7 +62,7 @@ export function useGameSession() {
   const [eurekaGraph, setEurekaGraph] = useState<EurekaGraph | null>(null)
 
   const startSession = useCallback(async (
-    m: PlayMode, seed: string, target?: string
+    m: PlayMode, seed: string, target?: string, levelNumber?: number
   ) => {
     setLoading(true)
     try {
@@ -71,6 +70,7 @@ export function useGameSession() {
       setSessionId(res.session_id)
       setMode(m)
       setQuestTarget(target)
+      setActiveLevelNumber(levelNumber ?? null)
       setCurrentNode(seed.toLowerCase().replace(/ /g, '_'))
 
       const seedNode: Node = {
@@ -113,12 +113,38 @@ export function useGameSession() {
       setEdges(es => [...es, ...res.new_edges.map(toFlowEdge)])
     }
 
+    // Quest Level completion and lock progression
     if (res.completed && res.eureka_graph) {
       setCompleted(true)
       setEurekaGraph(res.eureka_graph)
+      if (activeLevelNumber) {
+        const currentUnlocked = Number(localStorage.getItem('sutravesh_max_level') || '1')
+        const nextLevel = Math.max(currentUnlocked, activeLevelNumber + 1)
+        localStorage.setItem('sutravesh_max_level', String(nextLevel))
+      }
+      confetti({ particleCount: 200, spread: 90, origin: { y: 0.5 }, colors: ['#a78bfa','#22d3ee','#fbbf24', '#10b981'] })
+    } else if (res.valid && activeLevelNumber && [1, 2, 3].includes(activeLevelNumber)) {
+      // Tier 1 casual discovery (1-hop): any valid discovery successfully clears the level!
+      setCompleted(true)
+      const currentUnlocked = Number(localStorage.getItem('sutravesh_max_level') || '1')
+      const nextLevel = Math.max(currentUnlocked, activeLevelNumber + 1)
+      localStorage.setItem('sutravesh_max_level', String(nextLevel))
+      const victoryTarget = res.new_node ? res.new_node.label : 'Discovery'
+      setEurekaGraph({
+        nodes: [
+          ...nodes.map(n => ({ id: n.id, label: (n.data as any).label, category: 'general', description: '' })),
+          ...(res.new_node ? [res.new_node] : [])
+        ],
+        edges: [...res.new_edges],
+        quest_title: `Level ${activeLevelNumber} Discovery Cleared!`,
+        target_concept: victoryTarget,
+        hops_taken: 1,
+        hops_saved: 0,
+        total_bonus_points: res.total_points,
+      })
       confetti({ particleCount: 200, spread: 90, origin: { y: 0.5 }, colors: ['#a78bfa','#22d3ee','#fbbf24', '#10b981'] })
     }
-  }, [nodes.length, setNodes, setEdges])
+  }, [nodes, activeLevelNumber, setNodes, setEdges])
 
   // ── Text hop: concept + explanation ─────────────────────────────────────────
   const handleTextHop = useCallback(async (concept: string, explanation: string) => {
@@ -159,6 +185,7 @@ export function useGameSession() {
 
   const reset = useCallback(() => {
     setSessionId(null)
+    setActiveLevelNumber(null)
     setNodes([])
     setEdges([])
     setCompleted(false)
@@ -166,7 +193,7 @@ export function useGameSession() {
   }, [setNodes, setEdges])
 
   return {
-    sessionId, mode, questTarget, currentNode,
+    sessionId, mode, questTarget, activeLevelNumber, currentNode,
     nodes, edges, onNodesChange, onEdgesChange,
     loading, totalPoints, hopsCount, badges,
     lastVerdict, lastReason, lastPoints,
