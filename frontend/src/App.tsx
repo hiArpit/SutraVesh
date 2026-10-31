@@ -1,7 +1,7 @@
 import { ReactFlow, Background, Controls, MiniMap, BackgroundVariant, useReactFlow } from '@xyflow/react'
 import '@xyflow/react/dist/style.css'
 import { AnimatePresence } from 'framer-motion'
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useCallback } from 'react'
 
 import { useGameSession } from './hooks/useGameSession'
 import ModeSelector from './components/ModeSelector'
@@ -29,7 +29,6 @@ function AutoFitView({ nodeCount }: { nodeCount: number }) {
   return null
 }
 
-
 export default function App() {
   const [currentUser, setCurrentUser] = useState<UserProfile | null>(null)
 
@@ -53,6 +52,40 @@ export default function App() {
     lastCardResponse, isCardModalOpen, setIsCardModalOpen,
     startSession, startSessionWithImage, handleTextHop, handleImageHop, reset,
   } = useGameSession(currentUser)
+
+  const goHome = useCallback(() => {
+    if (nodes.length > 1 && !completed) {
+      if (!window.confirm('Return to Home? Your discovery trail is saved in your points!')) {
+        return
+      }
+    }
+    if (window.location.hash !== '#home') {
+      window.history.pushState({ screen: 'home' }, '', '#home')
+    }
+    reset()
+  }, [nodes.length, completed, reset])
+
+  // Handle browser back button (popstate) to return home or close card instead of exiting site
+  useEffect(() => {
+    if (!window.location.hash || window.location.hash === '#') {
+      window.history.replaceState({ screen: 'home' }, '', '#home')
+    }
+
+    const handlePopState = () => {
+      const hash = window.location.hash
+      if (!hash || hash === '#home') {
+        if (sessionId) {
+          reset()
+        }
+        setIsCardModalOpen(false)
+      } else if (hash === '#map') {
+        setIsCardModalOpen(false)
+      }
+    }
+
+    window.addEventListener('popstate', handlePopState)
+    return () => window.removeEventListener('popstate', handlePopState)
+  }, [sessionId, reset, setIsCardModalOpen])
 
   // ── Landing screen ──────────────────────────────────────────────────────────
   if (!sessionId) {
@@ -121,25 +154,30 @@ export default function App() {
 
       {/* RIGHT: Score panel */}
       <div className="w-80 bg-white/60 backdrop-blur-sm border-l-2 border-orange-100 p-5 overflow-y-auto flex flex-col gap-4 shadow-sm">
-        {/* Header */}
-        <div className="flex items-center justify-between pb-2 border-b border-orange-100">
-          <div className="flex items-center gap-2">
-            <div className="w-7 h-7 rounded-lg bg-orange-500 text-white flex items-center justify-center font-black text-sm shadow-sm">
+        {/* Header with Clickable Logo to return Home */}
+        <div className="flex items-center justify-between pb-3 border-b border-orange-100">
+          <div
+            onClick={goHome}
+            className="flex items-center gap-2.5 cursor-pointer hover:opacity-85 transition-opacity group"
+            title="Click logo to return Home"
+          >
+            <div className="w-8 h-8 rounded-xl bg-orange-500 text-white flex items-center justify-center font-black text-sm shadow-sm group-hover:scale-105 transition-transform">
               🔍
             </div>
             <div>
-              <h1 className="text-base font-black text-slate-900 leading-none">SutraVesh</h1>
+              <h1 className="text-base font-black text-slate-900 leading-none group-hover:text-orange-600 transition-colors flex items-center gap-1.5">
+                <span>SutraVesh</span>
+                <span className="text-[10px] text-orange-600 font-bold bg-orange-50 px-1.5 py-0.5 rounded-md border border-orange-200">
+                  🏠 Home
+                </span>
+              </h1>
               <p className="text-[11px] font-bold text-orange-600 mt-0.5">
                 {questTarget ? '🎯 Trail Quest' : '🌿 Discovery Trail'}
               </p>
             </div>
           </div>
           <button
-            onClick={() => {
-              if (nodes.length <= 1 || window.confirm('Exit current discovery trail and start a new exploration?')) {
-                reset()
-              }
-            }}
+            onClick={goHome}
             className="px-2.5 py-1 bg-slate-100 hover:bg-rose-50 text-slate-500 hover:text-rose-600 rounded-xl text-xs font-bold transition-all cursor-pointer"
             title="Start new trail"
           >
@@ -165,7 +203,12 @@ export default function App() {
       <DiscoveryCardModal
         isOpen={isCardModalOpen}
         cardData={lastCardResponse}
-        onClose={() => setIsCardModalOpen(false)}
+        onClose={() => {
+          if (window.location.hash === '#card') {
+            window.history.back()
+          }
+          setIsCardModalOpen(false)
+        }}
       />
 
       {/* OVERLAY: Eureka card on quest completion */}

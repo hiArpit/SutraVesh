@@ -1,4 +1,4 @@
-import { useState, useRef } from 'react'
+import { useState, useRef, useEffect } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
 import { Camera, Send, Loader2, X, Sparkles, Upload } from 'lucide-react'
 import LiveCameraModal from './LiveCameraModal'
@@ -22,6 +22,27 @@ export default function HopInput({
   const [imagePreview, setImagePreview] = useState<string | null>(null)
   const [isCameraOpen, setIsCameraOpen] = useState(false)
   const fileInputRef = useRef<HTMLInputElement | null>(null)
+
+  const openCamera = () => {
+    window.history.pushState({ modal: 'camera' }, '', '#camera')
+    setIsCameraOpen(true)
+  }
+  const closeCamera = () => {
+    if (window.location.hash === '#camera') {
+      window.history.back()
+    }
+    setIsCameraOpen(false)
+  }
+
+  useEffect(() => {
+    const handlePopState = () => {
+      if (window.location.hash !== '#camera') {
+        setIsCameraOpen(false)
+      }
+    }
+    window.addEventListener('popstate', handlePopState)
+    return () => window.removeEventListener('popstate', handlePopState)
+  }, [])
 
   const handleCapturedPhoto = (file: File) => {
     setImageFile(file)
@@ -116,7 +137,7 @@ export default function HopInput({
         {/* Camera Live Viewfinder Trigger */}
         <button
           type="button"
-          onClick={() => setIsCameraOpen(true)}
+          onClick={openCamera}
           disabled={disabled || loading}
           className="px-3.5 py-2.5 rounded-2xl bg-orange-50 hover:bg-orange-100 text-orange-600 font-black text-xs transition-colors cursor-pointer disabled:opacity-40 flex items-center gap-1.5 border border-orange-200 shadow-2xs shrink-0"
           title="Open live camera lens"
@@ -187,7 +208,7 @@ export default function HopInput({
       {/* Live Camera Viewfinder Modal */}
       <LiveCameraModal
         isOpen={isCameraOpen}
-        onClose={() => setIsCameraOpen(false)}
+        onClose={closeCamera}
         onCapture={handleCapturedPhoto}
       />
     </motion.div>
