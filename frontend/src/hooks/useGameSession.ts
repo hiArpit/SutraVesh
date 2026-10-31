@@ -148,7 +148,7 @@ export function useGameSession() {
         localStorage.setItem('sutravesh_max_level', String(nextLevel))
       }
       confetti({ particleCount: 200, spread: 90, origin: { y: 0.5 }, colors: ['#a78bfa','#22d3ee','#fbbf24', '#10b981'] })
-    } else if (res.valid && activeLevelNumber && [1, 2, 3].includes(activeLevelNumber)) {
+    } else if (res.valid && res.new_edges && res.new_edges.length > 0 && activeLevelNumber && [1, 2, 3].includes(activeLevelNumber)) {
       // Tier 1 casual discovery (1-hop): any valid discovery successfully clears the level!
       setCompleted(true)
       const currentUnlocked = Number(localStorage.getItem('sutravesh_max_level') || '1')

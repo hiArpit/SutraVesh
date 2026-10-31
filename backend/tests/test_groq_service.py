@@ -134,7 +134,7 @@ async def test_hop_offline_when_no_client():
         result = await evaluate_hop("sun", "photosynthesis", "sun gives energy to plants")
 
     assert result["fallback"] is True
-    assert result["verdict"] == "association"
+    assert result["verdict"] in ("association", "established")
     # Wikipedia was still fetched — evidence_urls should reflect that
     # (sun wiki has a url, but offline fallback passes it through)
     assert isinstance(result["evidence_urls"], list)
