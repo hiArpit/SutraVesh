@@ -11,35 +11,49 @@ interface Props {
 export default function LiveCameraModal({ isOpen, onClose, onCapture }: Props) {
   const videoRef = useRef<HTMLVideoElement | null>(null)
   const fileInputRef = useRef<HTMLInputElement | null>(null)
-  const [stream, setStream] = useState<MediaStream | null>(null)
+  const [, setStream] = useState<MediaStream | null>(null)
   const [error, setError] = useState<string | null>(null)
   const [facingMode, setFacingMode] = useState<'environment' | 'user'>('environment')
   const [hasPermission, setHasPermission] = useState<boolean>(false)
 
+  const streamRef = useRef<MediaStream | null>(null)
+
   const stopStream = useCallback(() => {
-    if (stream) {
-      stream.getTracks().forEach(track => track.stop())
-      setStream(null)
+    if (streamRef.current) {
+      streamRef.current.getTracks().forEach(track => track.stop())
+      streamRef.current = null
     }
-  }, [stream])
+    setStream(null)
+  }, [])
 
   const startStream = useCallback(async () => {
-    stopStream()
     setError(null)
     try {
       if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
         throw new Error('Live camera is not supported on this browser.')
       }
 
-      const mediaStream = await navigator.mediaDevices.getUserMedia({
-        video: {
-          facingMode: { ideal: facingMode },
-          width: { ideal: 1280 },
-          height: { ideal: 720 },
-        },
-        audio: false,
-      })
+      let mediaStream: MediaStream
+      try {
+        mediaStream = await navigator.mediaDevices.getUserMedia({
+          video: {
+            facingMode: { ideal: facingMode },
+            width: { ideal: 1280 },
+            height: { ideal: 720 },
+          },
+          audio: false,
+        })
+      } catch {
+        mediaStream = await navigator.mediaDevices.getUserMedia({
+          video: true,
+          audio: false,
+        })
+      }
 
+      if (streamRef.current) {
+        streamRef.current.getTracks().forEach(t => t.stop())
+      }
+      streamRef.current = mediaStream
       setStream(mediaStream)
       setHasPermission(true)
       if (videoRef.current) {
@@ -55,7 +69,7 @@ export default function LiveCameraModal({ isOpen, onClose, onCapture }: Props) {
       )
       setHasPermission(false)
     }
-  }, [facingMode, stopStream])
+  }, [facingMode])
 
   useEffect(() => {
     if (isOpen) {
