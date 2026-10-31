@@ -30,9 +30,9 @@ export default function App() {
   }
 
   const {
-    sessionId, mode, questTarget, currentNode,
+    sessionId, mode, questTarget, activeLevelNumber, currentNode,
     nodes, edges, onNodesChange, onEdgesChange,
-    loading, totalPoints, hopsCount, badges,
+    loading, totalPoints, cumulativePoints, hopsCount, badges,
     lastVerdict, lastReason, lastPoints,
     completed, eurekaGraph,
     lastCardResponse, isCardModalOpen, setIsCardModalOpen,
@@ -127,6 +127,8 @@ export default function App() {
 
         <ScorePanel
           totalPoints={totalPoints}
+          cumulativePoints={cumulativePoints}
+          activeLevelNumber={activeLevelNumber}
           hopsCount={hopsCount}
           badges={badges}
           lastVerdict={lastVerdict}
