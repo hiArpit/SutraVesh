@@ -1,0 +1,167 @@
+import { useState, useCallback } from 'react'
+import { useNodesState, useEdgesState } from '@xyflow/react'
+import type { Node, Edge } from '@xyflow/react'
+import confetti from 'canvas-confetti'
+import { createSession, submitHop, submitImageHop } from '../api/client'
+import type { PlayMode, HopVerdict, EurekaGraph, GameNode, GameEdge } from '../types/game'
+
+// Auto-layout: place new nodes in a spiral around the canvas
+function nextPosition(index: number) {
+  const angle = index * 0.8
+  const radius = 120 + index * 50
+  return {
+    x: 400 + radius * Math.cos(angle),
+    y: 300 + radius * Math.sin(angle),
+  }
+}
+
+function toFlowNode(gNode: GameNode, index: number): Node {
+  return {
+    id: gNode.id,
+    type: 'bubble',
+    position: nextPosition(index),
+    data: {
+      label: gNode.label,
+      category: gNode.category,
+      description: gNode.description,
+    },
+  }
+}
+
+function toFlowEdge(gEdge: GameEdge): Edge {
+  const colorMap: Record<string, string> = {
+    established: '#22d3ee',
+    association:  '#a78bfa',
+    resonance:    '#fb923c',
+  }
+  return {
+    id: `${gEdge.source}-${gEdge.target}`,
+    source: gEdge.source,
+    target: gEdge.target,
+    label: gEdge.relationship.slice(0, 30),
+    style: { stroke: colorMap[gEdge.support] ?? '#a78bfa', strokeWidth: 2 },
+    animated: gEdge.support === 'established',
+  }
+}
+
+export function useGameSession() {
+  const [sessionId, setSessionId] = useState<string | null>(null)
+  const [mode, setMode] = useState<PlayMode>('quest')
+  const [questTarget, setQuestTarget] = useState<string | undefined>()
+  const [currentNode, setCurrentNode] = useState<string>('')
+
+  const [nodes, setNodes, onNodesChange] = useNodesState<Node>([])
+  const [edges, setEdges, onEdgesChange] = useEdgesState<Edge>([])
+
+  const [loading, setLoading] = useState(false)
+  const [totalPoints, setTotalPoints] = useState(0)
+  const [hopsCount, setHopsCount] = useState(0)
+  const [badges, setBadges] = useState<string[]>([])
+  const [lastVerdict, setLastVerdict] = useState<HopVerdict | null>(null)
+  const [lastReason, setLastReason] = useState('')
+  const [lastPoints, setLastPoints] = useState(0)
+  const [completed, setCompleted] = useState(false)
+  const [eurekaGraph, setEurekaGraph] = useState<EurekaGraph | null>(null)
+
+  // ── Start a new session ─────────────────────────────────────────────────────
+  const startSession = useCallback(async (
+    m: PlayMode, seed: string, target?: string
+  ) => {
+    setLoading(true)
+    try {
+      const res = await createSession(m, seed, target)
+      setSessionId(res.session_id)
+      setMode(m)
+      setQuestTarget(target)
+      setCurrentNode(seed.toLowerCase().replace(/ /g, '_'))
+
+      // Add seed node to canvas
+      const seedNode: Node = {
+        id: seed.toLowerCase().replace(/ /g, '_'),
+        type: 'bubble',
+        position: { x: 400, y: 300 },
+        data: { label: seed, category: 'general', description: '' },
+      }
+      setNodes([seedNode])
+      setEdges([])
+      setTotalPoints(0)
+      setHopsCount(0)
+      setBadges([])
+      setLastVerdict(null)
+      setCompleted(false)
+      setEurekaGraph(null)
+    } finally {
+      setLoading(false)
+    }
+  }, [setNodes, setEdges])
+
+  // ── Process hop response ────────────────────────────────────────────────────
+  const applyHopResponse = useCallback((res: Awaited<ReturnType<typeof submitHop>>) => {
+    setLastVerdict(res.verdict)
+    setLastReason(res.reason)
+    setLastPoints(res.points_awarded)
+    setTotalPoints(res.total_points)
+    setHopsCount(h => h + (res.valid ? 1 : 0))
+    setBadges(prev => {
+      const next = [...prev]
+      res.badges_unlocked.forEach(b => { if (!next.includes(b)) next.push(b) })
+      return next
+    })
+
+    if (res.new_node) {
+      const idx = nodes.length
+      setNodes(ns => [...ns, toFlowNode(res.new_node!, idx)])
+      setCurrentNode(res.new_node.id)
+    }
+    if (res.new_edges.length > 0) {
+      setEdges(es => [...es, ...res.new_edges.map(toFlowEdge)])
+    }
+
+    if (res.completed && res.eureka_graph) {
+      setCompleted(true)
+      setEurekaGraph(res.eureka_graph)
+      confetti({ particleCount: 180, spread: 80, origin: { y: 0.5 }, colors: ['#a78bfa','#22d3ee','#fbbf24'] })
+    }
+  }, [nodes.length, setNodes, setEdges])
+
+  // ── Text hop ────────────────────────────────────────────────────────────────
+  const handleTextHop = useCallback(async (explanation: string) => {
+    if (!sessionId) return
+    setLoading(true)
+    try {
+      const res = await submitHop(sessionId, mode, explanation, currentNode, questTarget?.toLowerCase().replace(/ /g,'_'))
+      applyHopResponse(res)
+    } finally {
+      setLoading(false)
+    }
+  }, [sessionId, mode, currentNode, questTarget, applyHopResponse])
+
+  // ── Image hop ────────────────────────────────────────────────────────────────
+  const handleImageHop = useCallback(async (explanation: string, file: File) => {
+    if (!sessionId) return
+    setLoading(true)
+    try {
+      const res = await submitImageHop(sessionId, mode, explanation, file, currentNode)
+      applyHopResponse(res)
+    } finally {
+      setLoading(false)
+    }
+  }, [sessionId, mode, currentNode, applyHopResponse])
+
+  const reset = useCallback(() => {
+    setSessionId(null)
+    setNodes([])
+    setEdges([])
+    setCompleted(false)
+    setEurekaGraph(null)
+  }, [setNodes, setEdges])
+
+  return {
+    sessionId, mode, questTarget, currentNode,
+    nodes, edges, onNodesChange, onEdgesChange,
+    loading, totalPoints, hopsCount, badges,
+    lastVerdict, lastReason, lastPoints,
+    completed, eurekaGraph,
+    startSession, handleTextHop, handleImageHop, reset,
+  }
+}
