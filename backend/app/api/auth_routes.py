@@ -5,11 +5,13 @@ POST /api/auth/register  — Create a new account
 POST /api/auth/login     — Sign in & obtain JWT access token
 GET  /api/auth/me        — Get logged-in user profile
 POST /api/auth/progress  — Save/sync user quest and score progress
+GET  /api/auth/map       — Retrieve user's saved discovery map
+POST /api/auth/map       — Save user's discovery map nodes and edges
 """
 
 from fastapi import APIRouter, HTTPException, Depends
 from pydantic import BaseModel, Field
-from typing import Optional
+from typing import Optional, List, Any
 
 from app.core.auth import (
     register_user,
@@ -18,6 +20,8 @@ from app.core.auth import (
     require_user,
     get_current_user,
     update_user_progress,
+    get_user_map,
+    save_user_map,
 )
 
 auth_router = APIRouter(prefix="/api/auth", tags=["authentication"])
@@ -38,6 +42,11 @@ class UpdateProgressRequest(BaseModel):
     total_score: Optional[int] = None
     quests_completed: Optional[int] = None
     max_level: Optional[int] = None
+
+
+class UserMapPayload(BaseModel):
+    nodes: List[Any] = []
+    edges: List[Any] = []
 
 
 class AuthTokenResponse(BaseModel):
@@ -76,3 +85,13 @@ async def save_progress(body: UpdateProgressRequest, user: dict = Depends(requir
         max_level=body.max_level,
     )
     return updated
+
+
+@auth_router.get("/map")
+async def get_my_map(user: dict = Depends(require_user)):
+    return get_user_map(user["username"])
+
+
+@auth_router.post("/map")
+async def save_my_map(body: UserMapPayload, user: dict = Depends(require_user)):
+    return save_user_map(user["username"], body.nodes, body.edges)

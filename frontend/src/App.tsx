@@ -31,6 +31,7 @@ function AutoFitView({ nodeCount }: { nodeCount: number }) {
 
 export default function App() {
   const [currentUser, setCurrentUser] = useState<UserProfile | null>(null)
+  const [isAuthOpen, setIsAuthOpen] = useState(false)
 
   useEffect(() => {
     getMeApi().then(user => {
@@ -50,7 +51,7 @@ export default function App() {
     lastVerdict, lastReason, lastPoints,
     completed, eurekaGraph,
     lastCardResponse, isCardModalOpen, setIsCardModalOpen,
-    startSession, startSessionWithImage, handleTextHop, handleImageHop, reset,
+    startSession, startSessionWithImage, exploreDiscoveryMap, handleTextHop, handleImageHop, reset,
   } = useGameSession(currentUser)
 
   const goHome = useCallback(() => {
@@ -92,11 +93,19 @@ export default function App() {
     return (
       <div className="relative">
         <div className="absolute top-4 right-4 z-40">
-          <AuthModal user={currentUser} onAuthChange={setCurrentUser} onLogout={handleLogout} />
+          <AuthModal
+            user={currentUser}
+            onAuthChange={setCurrentUser}
+            onLogout={handleLogout}
+            isOpenExternal={isAuthOpen}
+            onOpenChange={setIsAuthOpen}
+          />
         </div>
         <ModeSelector
           onStart={startSession}
           onCaptureImage={startSessionWithImage}
+          onExploreMap={exploreDiscoveryMap}
+          onOpenAuth={() => setIsAuthOpen(true)}
           loading={loading}
           currentUser={currentUser}
         />
@@ -109,7 +118,13 @@ export default function App() {
     <div className="flex h-screen bg-[#FAF6EE] overflow-hidden">
       {/* Top right auth widget */}
       <div className="absolute top-4 right-84 z-30">
-        <AuthModal user={currentUser} onAuthChange={setCurrentUser} onLogout={handleLogout} />
+        <AuthModal
+          user={currentUser}
+          onAuthChange={setCurrentUser}
+          onLogout={handleLogout}
+          isOpenExternal={isAuthOpen}
+          onOpenChange={setIsAuthOpen}
+        />
       </div>
 
       {/* LEFT: Graph canvas */}

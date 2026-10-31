@@ -68,6 +68,30 @@ export async function updateUserProgressApi(params: {
   }
 }
 
+export async function getUserMapApi() {
+  const token = localStorage.getItem('sutravesh_token')
+  if (!token) return { nodes: [], edges: [] }
+  try {
+    const { data } = await axios.get(`${BASE}/auth/map`)
+    return data as { nodes: any[]; edges: any[] }
+  } catch (err) {
+    console.warn('Failed to load user map from backend', err)
+    return { nodes: [], edges: [] }
+  }
+}
+
+export async function saveUserMapApi(nodes: any[], edges: any[]) {
+  const token = localStorage.getItem('sutravesh_token')
+  if (!token) return null
+  try {
+    const { data } = await axios.post(`${BASE}/auth/map`, { nodes, edges })
+    return data
+  } catch (err) {
+    console.warn('Failed to save user map to backend', err)
+    return null
+  }
+}
+
 // ── Game Session APIs ────────────────────────────────────────────────────────
 export async function createSession(
   mode: PlayMode,

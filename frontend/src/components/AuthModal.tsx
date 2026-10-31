@@ -7,10 +7,19 @@ interface Props {
   user: { username: string; display_name: string } | null
   onAuthChange: (user: { username: string; display_name: string } | null) => void
   onLogout: () => void
+  isOpenExternal?: boolean
+  onOpenChange?: (open: boolean) => void
 }
 
-export default function AuthModal({ user, onAuthChange, onLogout }: Props) {
-  const [isOpen, setIsOpen] = useState(false)
+export default function AuthModal({ user, onAuthChange, onLogout, isOpenExternal, onOpenChange }: Props) {
+  const [internalOpen, setInternalOpen] = useState(false)
+  const isModalOpen = isOpenExternal !== undefined ? isOpenExternal : internalOpen
+
+  const setOpen = (open: boolean) => {
+    setInternalOpen(open)
+    onOpenChange?.(open)
+  }
+
   const [isRegister, setIsRegister] = useState(false)
   const [username, setUsername] = useState('')
   const [password, setPassword] = useState('')
@@ -30,7 +39,7 @@ export default function AuthModal({ user, onAuthChange, onLogout }: Props) {
         const res = await loginApi(username, password)
         onAuthChange(res.user)
       }
-      setIsOpen(false)
+      setOpen(false)
       setUsername('')
       setPassword('')
     } catch (err: any) {
@@ -57,7 +66,7 @@ export default function AuthModal({ user, onAuthChange, onLogout }: Props) {
         </div>
       ) : (
         <button
-          onClick={() => setIsOpen(true)}
+          onClick={() => setOpen(true)}
           className="flex items-center gap-1.5 bg-orange-500 hover:bg-orange-600 active:translate-y-0.5 text-white px-4 py-2 rounded-2xl text-xs font-black shadow-md border-b-2 border-orange-700 active:border-b-0 transition-all cursor-pointer"
         >
           <LogIn size={13} />
@@ -67,7 +76,7 @@ export default function AuthModal({ user, onAuthChange, onLogout }: Props) {
 
       {/* Modal Dialog */}
       <AnimatePresence>
-        {isOpen && (
+        {isModalOpen && (
           <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/40 backdrop-blur-sm p-4">
             <motion.div
               initial={{ opacity: 0, scale: 0.9 }}
@@ -76,7 +85,7 @@ export default function AuthModal({ user, onAuthChange, onLogout }: Props) {
               className="bg-white border-2 border-orange-100 rounded-3xl p-6 max-w-sm w-full shadow-2xl relative text-slate-800"
             >
               <button
-                onClick={() => setIsOpen(false)}
+                onClick={() => setOpen(false)}
                 className="absolute top-4 right-4 text-slate-400 hover:text-slate-700 p-1 rounded-full cursor-pointer"
               >
                 <X size={18} />
@@ -102,60 +111,63 @@ export default function AuthModal({ user, onAuthChange, onLogout }: Props) {
                 </div>
               )}
 
-              <form onSubmit={handleSubmit} className="flex flex-col gap-3.5">
+              <form onSubmit={handleSubmit} className="space-y-3.5">
                 {isRegister && (
                   <div>
-                    <label className="text-[11px] font-bold text-slate-600 block mb-1 uppercase tracking-wider">Display Name</label>
+                    <label className="block text-xs font-bold text-slate-600 mb-1">Display Name (optional)</label>
                     <input
                       type="text"
                       value={displayName}
-                      onChange={e => setDisplayName(e.target.value)}
-                      placeholder="e.g. Astro Explorer"
-                      className="w-full bg-[#FAF6EE] text-slate-800 text-xs font-semibold px-3.5 py-2.5 rounded-2xl border border-orange-200 focus:outline-none focus:border-orange-500"
+                      onChange={(e) => setDisplayName(e.target.value)}
+                      placeholder="e.g. Curious Explorer"
+                      className="w-full px-3.5 py-2 text-xs border-2 border-orange-100 rounded-xl focus:outline-none focus:border-orange-400"
                     />
                   </div>
                 )}
 
                 <div>
-                  <label className="text-[11px] font-bold text-slate-600 block mb-1 uppercase tracking-wider">Username</label>
+                  <label className="block text-xs font-bold text-slate-600 mb-1">Username</label>
                   <input
                     type="text"
                     required
                     value={username}
-                    onChange={e => setUsername(e.target.value)}
-                    placeholder="Enter username"
-                    className="w-full bg-[#FAF6EE] text-slate-800 text-xs font-semibold px-3.5 py-2.5 rounded-2xl border border-orange-200 focus:outline-none focus:border-orange-500"
+                    onChange={(e) => setUsername(e.target.value)}
+                    placeholder="Choose a username"
+                    className="w-full px-3.5 py-2 text-xs border-2 border-orange-100 rounded-xl focus:outline-none focus:border-orange-400"
                   />
                 </div>
 
                 <div>
-                  <label className="text-[11px] font-bold text-slate-600 block mb-1 uppercase tracking-wider">Password</label>
+                  <label className="block text-xs font-bold text-slate-600 mb-1">Password</label>
                   <input
                     type="password"
                     required
                     value={password}
-                    onChange={e => setPassword(e.target.value)}
+                    onChange={(e) => setPassword(e.target.value)}
                     placeholder="Enter password"
-                    className="w-full bg-[#FAF6EE] text-slate-800 text-xs font-semibold px-3.5 py-2.5 rounded-2xl border border-orange-200 focus:outline-none focus:border-orange-500"
+                    className="w-full px-3.5 py-2 text-xs border-2 border-orange-100 rounded-xl focus:outline-none focus:border-orange-400"
                   />
                 </div>
 
                 <button
                   type="submit"
                   disabled={loading}
-                  className="mt-2 w-full py-3 bg-orange-500 hover:bg-orange-600 active:translate-y-0.5 text-white font-black text-xs rounded-2xl shadow-md border-b-4 border-orange-700 active:border-b-0 transition-all cursor-pointer disabled:opacity-50"
+                  className="w-full py-2.5 bg-orange-500 hover:bg-orange-600 active:translate-y-0.5 text-white font-black text-xs rounded-xl shadow-md border-b-2 border-orange-700 active:border-b-0 transition-all cursor-pointer mt-2"
                 >
-                  {loading ? 'Authenticating...' : isRegister ? 'Register & Start' : 'Log In'}
+                  {loading ? 'Please wait...' : isRegister ? 'Create Account' : 'Log In'}
                 </button>
               </form>
 
-              <div className="mt-4 pt-3.5 border-t border-orange-100 text-center">
+              <div className="mt-4 pt-3 border-t border-slate-100 text-center">
                 <button
                   type="button"
-                  onClick={() => { setIsRegister(!isRegister); setError('') }}
-                  className="text-xs text-orange-600 hover:text-orange-700 font-bold cursor-pointer"
+                  onClick={() => {
+                    setIsRegister(!isRegister)
+                    setError('')
+                  }}
+                  className="text-xs font-bold text-orange-600 hover:text-orange-700 cursor-pointer"
                 >
-                  {isRegister ? 'Already have an account? Sign In' : "Don't have an account? Register here"}
+                  {isRegister ? 'Already have an account? Log in' : "Don't have an account? Sign up"}
                 </button>
               </div>
             </motion.div>

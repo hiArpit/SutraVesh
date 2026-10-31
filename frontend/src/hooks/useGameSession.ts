@@ -2,7 +2,7 @@ import { useState, useCallback, useEffect } from 'react'
 import { useNodesState, useEdgesState, type Node, type Edge } from '@xyflow/react'
 import confetti from 'canvas-confetti'
 import type { PlayMode, HopVerdict, EurekaGraph, GameNode, GameEdge, HopResponse, UserProfile } from '../types/game'
-import { createSession, submitHop, submitImageHop, updateUserProgressApi } from '../api/client'
+import { createSession, submitHop, submitImageHop, updateUserProgressApi, getUserMapApi, saveUserMapApi } from '../api/client'
 
 // Converts backend GameNode → React Flow Node
 function toFlowNode(gNode: GameNode, index: number): Node {
@@ -55,6 +55,12 @@ export function useGameSession(currentUser?: UserProfile | null) {
 
   const getLevelKey = (user?: UserProfile | null) =>
     user ? `sutravesh_user_${user.username}_max_level` : 'sutravesh_guest_max_level'
+
+  const getMapNodesKey = (user?: UserProfile | null) =>
+    user ? `sutravesh_user_${user.username}_map_nodes` : 'sutravesh_guest_map_nodes'
+
+  const getMapEdgesKey = (user?: UserProfile | null) =>
+    user ? `sutravesh_user_${user.username}_map_edges` : 'sutravesh_guest_map_edges'
 
   const [sessionId, setSessionId] = useState<string | null>(null)
   const [mode, setMode] = useState<PlayMode>('quest')
@@ -162,11 +168,15 @@ export function useGameSession(currentUser?: UserProfile | null) {
     })
 
     if (res.new_node) {
-      const idx = nodes.length
       setNodes(ns => {
-        // Prevent duplicate node IDs
         if (ns.some(n => n.id === res.new_node!.id)) return ns
-        return [...ns, toFlowNode(res.new_node!, idx)]
+        const nextNodes = [...ns, toFlowNode(res.new_node!, ns.length)]
+        const nodesKey = getMapNodesKey(currentUser)
+        localStorage.setItem(nodesKey, JSON.stringify(nextNodes))
+        if (currentUser) {
+          saveUserMapApi(nextNodes, edges)
+        }
+        return nextNodes
       })
       setCurrentNode(res.new_node.id)
 
@@ -182,7 +192,13 @@ export function useGameSession(currentUser?: UserProfile | null) {
         const newFlowEdges = res.new_edges
           .map(toFlowEdge)
           .filter(e => !existingIds.has(e.id))
-        return [...es, ...newFlowEdges]
+        const nextEdges = [...es, ...newFlowEdges]
+        const edgesKey = getMapEdgesKey(currentUser)
+        localStorage.setItem(edgesKey, JSON.stringify(nextEdges))
+        if (currentUser) {
+          saveUserMapApi(nodes, nextEdges)
+        }
+        return nextEdges
       })
     }
 
@@ -225,64 +241,165 @@ export function useGameSession(currentUser?: UserProfile | null) {
       })
       confetti({ particleCount: 200, spread: 90, origin: { y: 0.5 }, colors: ['#a78bfa','#22d3ee','#fbbf24', '#10b981'] })
     }
-  }, [nodes, activeLevelNumber, currentUser, setNodes, setEdges])
+  }, [nodes, edges, activeLevelNumber, currentUser, setNodes, setEdges])
+
+  // ── Explore Discovery Map (User can explore map anytime) ─────────────────────
+  const exploreDiscoveryMap = useCallback(async () => {
+    setLoading(true)
+    try {
+      window.history.pushState({ screen: 'map' }, '', '#map')
+      setMode('world')
+      setQuestTarget(undefined)
+      setActiveLevelNumber(null)
+      setCompleted(false)
+      setEurekaGraph(null)
+
+      const nodesKey = getMapNodesKey(currentUser)
+      const edgesKey = getMapEdgesKey(currentUser)
+      let savedNodes: Node[] = []
+      let savedEdges: Edge[] = []
+
+      try {
+        const localNodes = localStorage.getItem(nodesKey)
+        const localEdges = localStorage.getItem(edgesKey)
+        if (localNodes) savedNodes = JSON.parse(localNodes)
+        if (localEdges) savedEdges = JSON.parse(localEdges)
+      } catch (e) {
+        console.warn('Error reading local map cache', e)
+      }
+
+      if (currentUser && savedNodes.length === 0) {
+        const remote = await getUserMapApi()
+        if (remote && remote.nodes && remote.nodes.length > 0) {
+          savedNodes = remote.nodes
+          savedEdges = remote.edges || []
+          localStorage.setItem(nodesKey, JSON.stringify(savedNodes))
+          localStorage.setItem(edgesKey, JSON.stringify(savedEdges))
+        }
+      }
+
+      // If user has no saved nodes yet, create a welcoming initial wonder
+      if (savedNodes.length === 0) {
+        const initialNode: Node = {
+          id: 'discovery_world',
+          type: 'bubble',
+          position: { x: 400, y: 300 },
+          data: {
+            label: 'Discovery World',
+            category: 'general',
+            description: 'Your personal discovery map! Snap or discover anything around you to branch out your world.',
+            what_is_it: 'Your very own world of curiosities!',
+            fun_fact: 'Every object you capture gets woven into this map!',
+            try_this: 'Use the camera below to capture a book, pen, plant, or anything in your room!',
+            grade_level: 'Grade 1.3',
+          },
+        }
+        savedNodes = [initialNode]
+      }
+
+      const activeSeed = (savedNodes[0]?.data as any)?.label || 'Discovery World'
+      const sessionRes = await createSession('world', activeSeed)
+      setSessionId(sessionRes.session_id)
+      setNodes(savedNodes)
+      setEdges(savedEdges)
+      setCurrentNode(savedNodes[savedNodes.length - 1]?.id || 'discovery_world')
+    } finally {
+      setLoading(false)
+    }
+  }, [currentUser, setNodes, setEdges])
 
   // ── Start discovery session directly from landing lens capture ──────────────
   const startSessionWithImage = useCallback(async (file: File) => {
     setLoading(true)
     try {
-      const res = await createSession('world', 'Wonder', undefined)
+      const nodesKey = getMapNodesKey(currentUser)
+      const edgesKey = getMapEdgesKey(currentUser)
+      let existingNodes: Node[] = []
+      let existingEdges: Edge[] = []
+      try {
+        const localN = localStorage.getItem(nodesKey)
+        const localE = localStorage.getItem(edgesKey)
+        if (localN) existingNodes = JSON.parse(localN)
+        if (localE) existingEdges = JSON.parse(localE)
+      } catch {}
+
+      const seedConcept = existingNodes.length > 0 && (existingNodes[0].data as any)?.label
+        ? (existingNodes[0].data as any).label
+        : 'Wonder'
+
+      const res = await createSession('world', seedConcept, undefined)
       window.history.pushState({ screen: 'map' }, '', '#map')
       setSessionId(res.session_id)
       setMode('world')
       setQuestTarget(undefined)
       setActiveLevelNumber(null)
-      setNodes([])
-      setEdges([])
-      setTotalPoints(0)
-      setHopsCount(0)
-      setBadges([])
       setCompleted(false)
       setEurekaGraph(null)
+
+      const sourceId = existingNodes.length > 0 ? existingNodes[existingNodes.length - 1].id : undefined
 
       const hopRes = await submitImageHop(
         res.session_id,
         'world',
-        'First wonder discovered through the lens!',
-        file
+        'Discovered through the lens!',
+        file,
+        sourceId
       )
 
+      let updatedNodes = [...existingNodes]
+      let updatedEdges = [...existingEdges]
+
       if (hopRes.new_node) {
-        const firstNode: Node = {
-          id: hopRes.new_node.id,
-          type: 'bubble',
-          position: { x: 400, y: 300 },
-          data: {
-            label: hopRes.new_node.label,
-            category: hopRes.new_node.category,
-            description: hopRes.new_node.description,
-            image_url: hopRes.new_node.image_url,
-            what_is_it: hopRes.what_is_it,
-            fun_fact: hopRes.fun_fact,
-            try_this: hopRes.try_this,
-            grade_level: hopRes.grade_level,
-          },
+        const nextIdx = updatedNodes.length
+        const newNode = toFlowNode(hopRes.new_node, nextIdx)
+        if (!updatedNodes.some(n => n.id === newNode.id)) {
+          updatedNodes.push(newNode)
         }
-        setNodes([firstNode])
         setCurrentNode(hopRes.new_node.id)
       }
+
+      if (hopRes.new_edges && hopRes.new_edges.length > 0) {
+        const existingEdgeIds = new Set(updatedEdges.map(e => e.id))
+        const newFlowEdges = hopRes.new_edges
+          .map(toFlowEdge)
+          .filter(e => !existingEdgeIds.has(e.id))
+        updatedEdges = [...updatedEdges, ...newFlowEdges]
+      }
+
+      setNodes(updatedNodes)
+      setEdges(updatedEdges)
       setLastVerdict(hopRes.verdict)
       setLastReason(hopRes.reason)
       setLastPoints(hopRes.points_awarded)
       setTotalPoints(hopRes.total_points)
-      setHopsCount(1)
+      setHopsCount(updatedNodes.length)
+
+      if (hopRes.points_awarded > 0) {
+        setCumulativePoints(prev => {
+          const nextPoints = prev + hopRes.points_awarded
+          const pKey = getPointsKey(currentUser)
+          localStorage.setItem(pKey, String(nextPoints))
+          if (currentUser) {
+            updateUserProgressApi({ total_score: nextPoints })
+          }
+          return nextPoints
+        })
+      }
+
       setLastCardResponse(hopRes)
       window.history.pushState({ modal: 'card' }, '', '#card')
       setIsCardModalOpen(true)
+
+      // Persist map
+      localStorage.setItem(nodesKey, JSON.stringify(updatedNodes))
+      localStorage.setItem(edgesKey, JSON.stringify(updatedEdges))
+      if (currentUser) {
+        saveUserMapApi(updatedNodes, updatedEdges)
+      }
     } finally {
       setLoading(false)
     }
-  }, [setNodes, setEdges])
+  }, [currentUser, setNodes, setEdges])
 
   // ── Text hop: concept (AI automatically answers why they connect) ───────────
   const handleTextHop = useCallback(async (concept: string, explanation?: string) => {
@@ -339,6 +456,6 @@ export function useGameSession(currentUser?: UserProfile | null) {
     lastVerdict, lastReason, lastPoints,
     completed, eurekaGraph,
     cumulativePoints, lastCardResponse, isCardModalOpen, setIsCardModalOpen,
-    startSession, startSessionWithImage, handleTextHop, handleImageHop, reset,
+    startSession, startSessionWithImage, exploreDiscoveryMap, handleTextHop, handleImageHop, reset,
   }
 }

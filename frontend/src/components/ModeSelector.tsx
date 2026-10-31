@@ -7,11 +7,21 @@ import QuestJourneyModal from './QuestJourneyModal'
 interface Props {
   onStart: (mode: PlayMode, seed: string, target?: string, levelNumber?: number) => void
   onCaptureImage?: (file: File) => void
+  onExploreMap?: () => void
+  onOpenAuth?: () => void
   loading?: boolean
   currentUser?: UserProfile | null
 }
 
-export default function ModeSelector({ onStart, onCaptureImage, loading = false, currentUser }: Props) {
+export default function ModeSelector({
+  onStart,
+  onCaptureImage,
+  onExploreMap,
+  onOpenAuth,
+  loading = false,
+  currentUser,
+}: Props) {
+  const [showGuestBanner, setShowGuestBanner] = useState(false)
   const [isJourneyModalOpen, setIsJourneyModalOpen] = useState(false)
   const [isOpenCustomModal, setIsOpenCustomModal] = useState(false)
   const [isRulesModalOpen, setIsRulesModalOpen] = useState(false)
@@ -419,8 +429,58 @@ export default function ModeSelector({ onStart, onCaptureImage, loading = false,
             </div>
           </div>
 
-          {/* Quest Ladder CTA */}
-          <div className="space-y-2.5">
+          {/* Discovery Map CTAs */}
+          <div className="space-y-3">
+            {/* Explore Discovery Map Button */}
+            <div>
+              <button
+                type="button"
+                onClick={() => {
+                  if (currentUser) {
+                    onExploreMap?.()
+                  } else {
+                    setShowGuestBanner(prev => !prev)
+                  }
+                }}
+                className="w-full py-3.5 px-5 bg-gradient-to-r from-emerald-500 to-teal-600 hover:from-emerald-600 hover:to-teal-700 active:translate-y-0.5 text-white font-black text-sm rounded-2xl shadow-lg border-b-4 border-emerald-800 active:border-b-0 transition-all cursor-pointer flex items-center justify-center gap-2"
+              >
+                <span>🗺️ Explore Discovery Map</span>
+                <ArrowRight size={16} />
+              </button>
+
+              {/* Guest Warning Banner if clicked while logged out */}
+              <AnimatePresence>
+                {showGuestBanner && !currentUser && (
+                  <motion.div
+                    initial={{ opacity: 0, y: -6, height: 0 }}
+                    animate={{ opacity: 1, y: 0, height: 'auto' }}
+                    exit={{ opacity: 0, y: -6, height: 0 }}
+                    className="overflow-hidden mt-2.5"
+                  >
+                    <div className="p-3.5 bg-amber-50 border-2 border-amber-200 rounded-2xl flex flex-col gap-2 text-left">
+                      <div className="flex items-start gap-2">
+                        <span className="text-base shrink-0">🔒</span>
+                        <p className="text-xs font-bold text-amber-900 leading-snug">
+                          Sign in or Register to explore and save your permanent Discovery Map!
+                        </p>
+                      </div>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          onOpenAuth?.()
+                          setShowGuestBanner(false)
+                        }}
+                        className="self-end py-1.5 px-3.5 bg-orange-500 hover:bg-orange-600 text-white text-xs font-black rounded-xl shadow-xs cursor-pointer transition-colors"
+                      >
+                        Sign in / Register now
+                      </button>
+                    </div>
+                  </motion.div>
+                )}
+              </AnimatePresence>
+            </div>
+
+            {/* Quest Ladder CTA */}
             <button
               type="button"
               onClick={openJourneyModal}
