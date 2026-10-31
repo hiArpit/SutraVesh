@@ -34,7 +34,7 @@ class HopRequest(BaseModel):
     quest_id: Optional[str] = Field(default=None, description="Quest ID when in quest mode")
     source_node_id: Optional[str] = Field(default=None, description="Current node to hop from")
     target_node_id: Optional[str] = Field(default=None, description="Goal target node in quest mode")
-    explanation: str = Field(..., description="Kid's connection explanation")
+    explanation: Optional[str] = Field(default=None, description="Optional kid's connection explanation")
 
 
 class EurekaGraph(BaseModel):

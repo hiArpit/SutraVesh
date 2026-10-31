@@ -66,17 +66,18 @@ async def process_hop(
         return _error_response("Session not found. Please start a new game!")
 
     # ------------------------------------------------------------------
-    # 1. Guardrails on the kid's explanation
+    # 1. Guardrails on the kid's explanation (optional for photos)
     # ------------------------------------------------------------------
-    safe, reason = check_input(request.explanation)
-    if not safe:
-        return HopResponse(
-            valid=False,
-            verdict="rejected",
-            reason=reason,
-            total_points=session.total_points,
-            badges_unlocked=session.badges,
-        )
+    if request.explanation and request.explanation.strip():
+        safe, reason = check_input(request.explanation)
+        if not safe:
+            return HopResponse(
+                valid=False,
+                verdict="rejected",
+                reason=reason,
+                total_points=session.total_points,
+                badges_unlocked=session.badges,
+            )
 
     # ------------------------------------------------------------------
     # 2. Vision — detect concept from image (optional)
@@ -103,10 +104,15 @@ async def process_hop(
     # ------------------------------------------------------------------
     # 3. Wikipedia + Groq Reasoning — evaluate the connection
     # ------------------------------------------------------------------
+    active_explanation = (
+        request.explanation.strip()
+        if (request.explanation and request.explanation.strip())
+        else f"Discovered {new_concept} in the environment."
+    )
     hop_result = await evaluate_hop(
         source=source_concept,
         target=new_concept,
-        explanation=request.explanation,
+        explanation=active_explanation,
         mode=request.mode,
     )
 
@@ -168,7 +174,7 @@ async def process_hop(
         new_edges.append(Edge(
             source=source_concept,
             target=node_id,
-            relationship=request.explanation,
+            relationship=active_explanation,
             support=primary_support,
             evidence_urls=evidence_urls,
         ))

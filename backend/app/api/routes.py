@@ -108,7 +108,7 @@ async def submit_hop(request: HopRequest):
 async def submit_image_hop(
     session_id: str = Form(...),
     mode: str = Form("quest"),
-    explanation: str = Form(...),
+    explanation: Optional[str] = Form(None),
     source_node_id: Optional[str] = Form(None),
     target_node_id: Optional[str] = Form(None),
     image: UploadFile = File(...),
