@@ -41,3 +41,7 @@ dist-ssr/
 *.swp
 *.swo
 .DS_Store
+
+# Local App Data & Sessions
+backend/app/data/
+backend/data/

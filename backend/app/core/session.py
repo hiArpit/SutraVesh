@@ -2,7 +2,7 @@
 Persistent MongoDB & Local File Session Manager
 ===============================================
 Stores active game sessions directly in MongoDB collection `sessions`
-with automatic local disk backup.
+with automatic local disk backup and high-performance memory caching.
 """
 
 import json
@@ -87,17 +87,22 @@ def _save_all_sessions(data: dict[str, dict]) -> None:
         pass
 
 
+_SESSIONS_CACHE: dict[str, dict] = _load_all_sessions()
+
+
 def _sync_to_mongo(session_data: dict) -> None:
+    from app.core.db import is_mongo_available
+    if not is_mongo_available():
+        return
     db = get_database()
     if db is not None:
         try:
-            loop = asyncio.get_event_loop()
-            if loop.is_running():
-                asyncio.create_task(db["sessions"].update_one(
-                    {"session_id": session_data["session_id"]},
-                    {"$set": session_data},
-                    upsert=True
-                ))
+            loop = asyncio.get_running_loop()
+            loop.create_task(db["sessions"].update_one(
+                {"session_id": session_data["session_id"]},
+                {"$set": session_data},
+                upsert=True
+            ))
         except Exception:
             pass
 
@@ -115,16 +120,14 @@ def create_session(
         quest_target=quest_target,
     )
     data = session.to_dict()
-    sessions = _load_all_sessions()
-    sessions[session_id] = data
-    _save_all_sessions(sessions)
+    _SESSIONS_CACHE[session_id] = data
+    _save_all_sessions(_SESSIONS_CACHE)
     _sync_to_mongo(data)
     return session
 
 
 def get_session(session_id: str) -> Optional[GameSession]:
-    sessions = _load_all_sessions()
-    data = sessions.get(session_id)
+    data = _SESSIONS_CACHE.get(session_id)
     if not data:
         return None
     return GameSession(
@@ -147,25 +150,24 @@ def get_session(session_id: str) -> Optional[GameSession]:
 
 def update_session(session: GameSession) -> None:
     data = session.to_dict()
-    sessions = _load_all_sessions()
-    sessions[session.session_id] = data
-    _save_all_sessions(sessions)
+    _SESSIONS_CACHE[session.session_id] = data
+    _save_all_sessions(_SESSIONS_CACHE)
     _sync_to_mongo(data)
 
 
 def delete_session(session_id: str) -> None:
-    sessions = _load_all_sessions()
-    sessions.pop(session_id, None)
-    _save_all_sessions(sessions)
-    db = get_database()
-    if db is not None:
-        try:
-            loop = asyncio.get_event_loop()
-            if loop.is_running():
-                asyncio.create_task(db["sessions"].delete_one({"session_id": session_id}))
-        except Exception:
-            pass
+    _SESSIONS_CACHE.pop(session_id, None)
+    _save_all_sessions(_SESSIONS_CACHE)
+    from app.core.db import is_mongo_available
+    if is_mongo_available():
+        db = get_database()
+        if db is not None:
+            try:
+                loop = asyncio.get_running_loop()
+                loop.create_task(db["sessions"].delete_one({"session_id": session_id}))
+            except Exception:
+                pass
 
 
 def active_session_count() -> int:
-    return len(_load_all_sessions())
+    return len(_SESSIONS_CACHE)

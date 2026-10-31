@@ -1,7 +1,7 @@
 <div align="center">
 
-# 🌟 SutraVesh (सूत्रवेष) · WonderLens
-### *Dual-Mode Agentic Discovery Engine for Curious Minds*
+# 🌟 SutraVesh (सूत्रवेष)
+### *Agentic Discovery Engine for Curious Minds*
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 [![Python: 3.11+](https://img.shields.io/badge/Python-3.11%2B-blue.svg)](https://www.python.org/)
@@ -61,7 +61,7 @@ We built a deterministic benchmark harness (`backend/evaluate_agent.py`) evaluat
 
 ```text
 ======================================================================
-SutraVesh (WonderLens) - AI Agent Evaluation Benchmark Harness
+SutraVesh - AI Agent Evaluation Benchmark Harness
 ======================================================================
 
 [PASS] Case 1: Valid Science Grounding

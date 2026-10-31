@@ -51,9 +51,9 @@ export default function App() {
 
   // ── Game screen ─────────────────────────────────────────────────────────────
   return (
-    <div className="flex h-screen bg-slate-950 overflow-hidden">
+    <div className="flex h-screen bg-[#FAF6EE] overflow-hidden">
       {/* Top right auth widget */}
-      <div className="absolute top-4 right-76 z-30">
+      <div className="absolute top-4 right-84 z-30">
         <AuthModal user={currentUser} onAuthChange={setCurrentUser} onLogout={handleLogout} />
       </div>
 
@@ -66,24 +66,24 @@ export default function App() {
           onEdgesChange={onEdgesChange}
           nodeTypes={NODE_TYPES}
           fitView
-          className="bg-slate-950"
+          className="bg-[#FAF6EE]"
         >
           <Background
             variant={BackgroundVariant.Dots}
             gap={24}
-            size={1}
-            color="#334155"
+            size={1.5}
+            color="#D5D9E2"
           />
-          <Controls className="!bg-slate-800 !border-slate-700" />
+          <Controls className="!bg-white !border-orange-100 !text-slate-700 !shadow-sm rounded-xl overflow-hidden" />
           <MiniMap
-            className="!bg-slate-900 !border-slate-700"
-            nodeColor="#7c3aed"
-            maskColor="rgba(2,6,23,0.7)"
+            className="!bg-white/90 !border-orange-200 !rounded-2xl !shadow-sm"
+            nodeColor="#F97316"
+            maskColor="rgba(250,246,238,0.7)"
           />
         </ReactFlow>
 
         {/* Bottom: Hop input bar */}
-        <div className="absolute bottom-4 left-4 right-4">
+        <div className="absolute bottom-4 left-4 right-4 z-20">
           <HopInput
             onTextHop={handleTextHop}
             onImageHop={handleImageHop}
@@ -97,18 +97,23 @@ export default function App() {
       </div>
 
       {/* RIGHT: Score panel */}
-      <div className="w-72 border-l border-slate-800 p-4 overflow-y-auto flex flex-col gap-4">
+      <div className="w-80 bg-white/60 backdrop-blur-sm border-l-2 border-orange-100 p-5 overflow-y-auto flex flex-col gap-4 shadow-sm">
         {/* Header */}
-        <div className="flex items-center justify-between">
-          <div>
-            <h1 className="text-lg font-black text-white">WonderLens</h1>
-            <p className="text-xs text-slate-500">
-              {mode === 'quest' ? '🏹 Chain Hunt' : '🌍 Divergent Islands'}
-            </p>
+        <div className="flex items-center justify-between pb-2 border-b border-orange-100">
+          <div className="flex items-center gap-2">
+            <div className="w-7 h-7 rounded-lg bg-orange-500 text-white flex items-center justify-center font-black text-sm shadow-sm">
+              🔍
+            </div>
+            <div>
+              <h1 className="text-base font-black text-slate-900 leading-none">SutraVesh</h1>
+              <p className="text-[11px] font-bold text-orange-600 mt-0.5">
+                {questTarget ? '🎯 Trail Quest' : '🌿 Discovery Trail'}
+              </p>
+            </div>
           </div>
           <button
             onClick={reset}
-            className="text-xs text-slate-500 hover:text-rose-400 transition-colors cursor-pointer"
+            className="px-2.5 py-1 bg-slate-100 hover:bg-rose-50 text-slate-500 hover:text-rose-600 rounded-xl text-xs font-bold transition-all cursor-pointer"
           >
             ✕ Exit
           </button>
