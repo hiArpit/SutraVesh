@@ -4,6 +4,15 @@ export type PlayMode = 'quest' | 'world'
 export type HopVerdict = 'established' | 'association' | 'rejected'
 export type EdgeSupport = 'established' | 'association' | 'resonance'
 
+export interface UserProfile {
+  id?: string
+  username: string
+  display_name: string
+  total_score?: number
+  quests_completed?: number
+  max_level?: number
+}
+
 export interface GameNode {
   id: string
   label: string
@@ -56,7 +65,7 @@ export interface HopResponse {
   badges_unlocked: string[]
   completed: boolean
   eureka_graph?: EurekaGraph | null
-  new_island_created: boolean
+  new_island_created?: boolean
 }
 
 export interface SessionState {

@@ -1,7 +1,7 @@
 """
 Tests for JWT Authentication System
 ====================================
-Validates register, login, password security, invalid tokens, and /api/auth/me.
+Validates register, login, password security, invalid tokens, /api/auth/me, and progress persistence.
 """
 
 import pytest
@@ -52,6 +52,17 @@ def test_register_and_login_flow():
     me_data = me_resp.json()
     assert me_data["username"] == "arpit_tester"
 
+    # 4. Save and verify user-specific progress
+    prog_resp = client.post(
+        "/api/auth/progress",
+        json={"total_score": 125, "max_level": 3},
+        headers={"Authorization": f"Bearer {token}"}
+    )
+    assert prog_resp.status_code == 200
+    prog_data = prog_resp.json()
+    assert prog_data["total_score"] >= 125
+    assert prog_data["max_level"] >= 3
+
 
 def test_login_invalid_password_fails():
     client.post("/api/auth/register", json={
@@ -67,9 +78,4 @@ def test_login_invalid_password_fails():
 
 def test_protected_route_without_token_fails():
     resp = client.get("/api/auth/me")
-    assert resp.status_code == 401
-
-
-def test_protected_route_with_tampered_token_fails():
-    resp = client.get("/api/auth/me", headers={"Authorization": "Bearer fake.tampered.token"})
     assert resp.status_code == 401

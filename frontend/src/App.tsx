@@ -12,11 +12,12 @@ import BubbleNode from './components/BubbleNode'
 import AuthModal from './components/AuthModal'
 import DiscoveryCardModal from './components/DiscoveryCardModal'
 import { getMeApi, logoutApi } from './api/client'
+import type { UserProfile } from './types/game'
 
 const NODE_TYPES = { bubble: BubbleNode }
 
 export default function App() {
-  const [currentUser, setCurrentUser] = useState<{ username: string; display_name: string } | null>(null)
+  const [currentUser, setCurrentUser] = useState<UserProfile | null>(null)
 
   useEffect(() => {
     getMeApi().then(user => {
@@ -37,7 +38,7 @@ export default function App() {
     completed, eurekaGraph,
     lastCardResponse, isCardModalOpen, setIsCardModalOpen,
     startSession, startSessionWithImage, handleTextHop, handleImageHop, reset,
-  } = useGameSession()
+  } = useGameSession(currentUser)
 
   // ── Landing screen ──────────────────────────────────────────────────────────
   if (!sessionId) {
@@ -50,6 +51,7 @@ export default function App() {
           onStart={startSession}
           onCaptureImage={startSessionWithImage}
           loading={loading}
+          currentUser={currentUser}
         />
       </div>
     )

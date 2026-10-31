@@ -1,8 +1,8 @@
-import { useState, useCallback } from 'react'
+import { useState, useCallback, useEffect } from 'react'
 import { useNodesState, useEdgesState, type Node, type Edge } from '@xyflow/react'
 import confetti from 'canvas-confetti'
-import type { PlayMode, HopVerdict, EurekaGraph, GameNode, GameEdge, HopResponse } from '../types/game'
-import { createSession, submitHop, submitImageHop } from '../api/client'
+import type { PlayMode, HopVerdict, EurekaGraph, GameNode, GameEdge, HopResponse, UserProfile } from '../types/game'
+import { createSession, submitHop, submitImageHop, updateUserProgressApi } from '../api/client'
 
 // Converts backend GameNode → React Flow Node
 function toFlowNode(gNode: GameNode, index: number): Node {
@@ -45,7 +45,13 @@ function toFlowEdge(gEdge: GameEdge): Edge {
   }
 }
 
-export function useGameSession() {
+export function useGameSession(currentUser?: UserProfile | null) {
+  const getPointsKey = (user?: UserProfile | null) =>
+    user ? `sutravesh_user_${user.username}_total_explorer_points` : 'sutravesh_guest_total_explorer_points'
+
+  const getLevelKey = (user?: UserProfile | null) =>
+    user ? `sutravesh_user_${user.username}_max_level` : 'sutravesh_guest_max_level'
+
   const [sessionId, setSessionId] = useState<string | null>(null)
   const [mode, setMode] = useState<PlayMode>('quest')
   const [questTarget, setQuestTarget] = useState<string | undefined>()
@@ -58,7 +64,10 @@ export function useGameSession() {
   const [loading, setLoading] = useState(false)
   const [totalPoints, setTotalPoints] = useState(0)
   const [cumulativePoints, setCumulativePoints] = useState<number>(() => {
-    return Number(localStorage.getItem('sutravesh_total_explorer_points') || '0')
+    const key = currentUser ? `sutravesh_user_${currentUser.username}_total_explorer_points` : 'sutravesh_guest_total_explorer_points'
+    const backendScore = currentUser?.total_score ?? 0
+    const localScore = Number(localStorage.getItem(key) || String(backendScore))
+    return Math.max(backendScore, localScore)
   })
   const [hopsCount, setHopsCount] = useState(0)
   const [badges, setBadges] = useState<string[]>([])
@@ -71,6 +80,25 @@ export function useGameSession() {
   // Kid Discovery Card popup state
   const [lastCardResponse, setLastCardResponse] = useState<HopResponse | null>(null)
   const [isCardModalOpen, setIsCardModalOpen] = useState(false)
+
+  // Switch/Reset in-memory canvas and load user-specific points when login/logout changes
+  useEffect(() => {
+    setSessionId(null)
+    setActiveLevelNumber(null)
+    setNodes([])
+    setEdges([])
+    setCompleted(false)
+    setEurekaGraph(null)
+    setLastCardResponse(null)
+    setIsCardModalOpen(false)
+
+    const key = getPointsKey(currentUser)
+    const backendScore = currentUser?.total_score ?? 0
+    const localScore = Number(localStorage.getItem(key) || String(backendScore))
+    const finalScore = Math.max(backendScore, localScore)
+    setCumulativePoints(finalScore)
+    localStorage.setItem(key, String(finalScore))
+  }, [currentUser?.username])
 
   const startSession = useCallback(async (
     m: PlayMode, seed: string, target?: string, levelNumber?: number
@@ -113,7 +141,11 @@ export function useGameSession() {
     if (res.points_awarded > 0) {
       setCumulativePoints(prev => {
         const nextPoints = prev + res.points_awarded
-        localStorage.setItem('sutravesh_total_explorer_points', String(nextPoints))
+        const pKey = getPointsKey(currentUser)
+        localStorage.setItem(pKey, String(nextPoints))
+        if (currentUser) {
+          updateUserProgressApi({ total_score: nextPoints })
+        }
         return nextPoints
       })
     }
@@ -153,17 +185,25 @@ export function useGameSession() {
       setCompleted(true)
       setEurekaGraph(res.eureka_graph)
       if (activeLevelNumber) {
-        const currentUnlocked = Number(localStorage.getItem('sutravesh_max_level') || '1')
+        const lKey = getLevelKey(currentUser)
+        const currentUnlocked = Number(localStorage.getItem(lKey) || String(currentUser?.max_level || 1))
         const nextLevel = Math.max(currentUnlocked, activeLevelNumber + 1)
-        localStorage.setItem('sutravesh_max_level', String(nextLevel))
+        localStorage.setItem(lKey, String(nextLevel))
+        if (currentUser) {
+          updateUserProgressApi({ max_level: nextLevel })
+        }
       }
       confetti({ particleCount: 200, spread: 90, origin: { y: 0.5 }, colors: ['#a78bfa','#22d3ee','#fbbf24', '#10b981'] })
     } else if (res.valid && res.new_edges && res.new_edges.length > 0 && activeLevelNumber && [1, 2, 3].includes(activeLevelNumber)) {
       // Tier 1 casual discovery (1-hop): any valid discovery successfully clears the level!
       setCompleted(true)
-      const currentUnlocked = Number(localStorage.getItem('sutravesh_max_level') || '1')
+      const lKey = getLevelKey(currentUser)
+      const currentUnlocked = Number(localStorage.getItem(lKey) || String(currentUser?.max_level || 1))
       const nextLevel = Math.max(currentUnlocked, activeLevelNumber + 1)
-      localStorage.setItem('sutravesh_max_level', String(nextLevel))
+      localStorage.setItem(lKey, String(nextLevel))
+      if (currentUser) {
+        updateUserProgressApi({ max_level: nextLevel })
+      }
       const victoryTarget = res.new_node ? res.new_node.label : 'Discovery'
       setEurekaGraph({
         nodes: [
@@ -179,7 +219,7 @@ export function useGameSession() {
       })
       confetti({ particleCount: 200, spread: 90, origin: { y: 0.5 }, colors: ['#a78bfa','#22d3ee','#fbbf24', '#10b981'] })
     }
-  }, [nodes, activeLevelNumber, setNodes, setEdges])
+  }, [nodes, activeLevelNumber, currentUser, setNodes, setEdges])
 
   // ── Start discovery session directly from landing lens capture ──────────────
   const startSessionWithImage = useCallback(async (file: File) => {
