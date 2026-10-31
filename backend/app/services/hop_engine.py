@@ -182,7 +182,7 @@ async def process_hop(
             new_edges.append(Edge(
                 source=source_concept.lower().replace(" ", "_"),
                 target=node_id,
-                relationship=active_explanation,
+                relationship=reason_text,
                 support=support_type,
                 evidence_urls=evidence_urls,
                 connection_rule=connection_rule,
