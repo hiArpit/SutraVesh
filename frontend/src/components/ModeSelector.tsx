@@ -5,7 +5,7 @@ import type { PlayMode, QuestLevel } from '../types/game'
 import QuestJourneyModal from './QuestJourneyModal'
 
 interface Props {
-  onStart: (mode: PlayMode, seed: string, target?: string) => void
+  onStart: (mode: PlayMode, seed: string, target?: string, levelNumber?: number) => void
 }
 
 export default function ModeSelector({ onStart }: Props) {
@@ -19,7 +19,7 @@ export default function ModeSelector({ onStart }: Props) {
   const handleSelectLevel = (level: QuestLevel) => {
     setIsJourneyModalOpen(false)
     const mode: PlayMode = level.target_wonder ? 'quest' : 'world'
-    onStart(mode, level.starting_seed, level.target_wonder || undefined)
+    onStart(mode, level.starting_seed, level.target_wonder || undefined, level.level_number)
   }
 
   const handleStartCustomGame = (e: React.FormEvent) => {
