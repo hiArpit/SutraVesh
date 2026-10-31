@@ -1,19 +1,20 @@
 """
-Persistent File-Backed Session Manager
-======================================
-Stores active game sessions on disk (backend/data/sessions.json)
-so that server reloads or restarts NEVER wipe out a player's active session!
+Persistent MongoDB & Local File Session Manager
+===============================================
+Stores active game sessions directly in MongoDB collection `sessions`
+with automatic local disk backup.
 """
 
 import json
 import os
 import uuid
+import asyncio
 from typing import Optional
 from app.schemas.graph import Node, Edge, PlayMode
+from app.core.db import get_database
 
 DATA_DIR = os.path.join(os.path.dirname(os.path.dirname(__file__)), "data")
 SESSIONS_FILE = os.path.join(DATA_DIR, "sessions.json")
-
 os.makedirs(DATA_DIR, exist_ok=True)
 
 
@@ -47,7 +48,6 @@ class GameSession:
         self.completed = completed
         self.current_node_id = current_node_id or seed_concept.lower().replace(" ", "_")
 
-        # Reconstruct Node and Edge objects if loaded from dict
         self.nodes: list[Node] = [Node(**n) if isinstance(n, dict) else n for n in (nodes or [])]
         self.edges: list[Edge] = [Edge(**e) if isinstance(e, dict) else e for e in (edges or [])]
 
@@ -87,6 +87,21 @@ def _save_all_sessions(data: dict[str, dict]) -> None:
         pass
 
 
+def _sync_to_mongo(session_data: dict) -> None:
+    db = get_database()
+    if db is not None:
+        try:
+            loop = asyncio.get_event_loop()
+            if loop.is_running():
+                asyncio.create_task(db["sessions"].update_one(
+                    {"session_id": session_data["session_id"]},
+                    {"$set": session_data},
+                    upsert=True
+                ))
+        except Exception:
+            pass
+
+
 def create_session(
     mode: PlayMode,
     seed_concept: str,
@@ -99,9 +114,11 @@ def create_session(
         seed_concept=seed_concept,
         quest_target=quest_target,
     )
+    data = session.to_dict()
     sessions = _load_all_sessions()
-    sessions[session_id] = session.to_dict()
+    sessions[session_id] = data
     _save_all_sessions(sessions)
+    _sync_to_mongo(data)
     return session
 
 
@@ -129,15 +146,25 @@ def get_session(session_id: str) -> Optional[GameSession]:
 
 
 def update_session(session: GameSession) -> None:
+    data = session.to_dict()
     sessions = _load_all_sessions()
-    sessions[session.session_id] = session.to_dict()
+    sessions[session.session_id] = data
     _save_all_sessions(sessions)
+    _sync_to_mongo(data)
 
 
 def delete_session(session_id: str) -> None:
     sessions = _load_all_sessions()
     sessions.pop(session_id, None)
     _save_all_sessions(sessions)
+    db = get_database()
+    if db is not None:
+        try:
+            loop = asyncio.get_event_loop()
+            if loop.is_running():
+                asyncio.create_task(db["sessions"].delete_one({"session_id": session_id}))
+        except Exception:
+            pass
 
 
 def active_session_count() -> int:

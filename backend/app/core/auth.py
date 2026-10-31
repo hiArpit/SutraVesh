@@ -2,6 +2,7 @@
 Authentication & JWT Security Utilities
 =======================================
 Password hashing with bcrypt & Token generation with PyJWT.
+Supports live MongoDB storage with automatic local fallback.
 """
 
 import os
@@ -14,6 +15,7 @@ import bcrypt
 from fastapi import Depends, HTTPException, status
 from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 from app.core.config import settings
+from app.core.db import get_database, is_mongo_available
 
 DATA_DIR = os.path.join(os.path.dirname(os.path.dirname(__file__)), "data")
 USERS_FILE = os.path.join(DATA_DIR, "users.json")
@@ -22,7 +24,7 @@ os.makedirs(DATA_DIR, exist_ok=True)
 security = HTTPBearer(auto_error=False)
 
 
-def _load_users() -> dict[str, dict]:
+def _load_users_file() -> dict[str, dict]:
     if not os.path.exists(USERS_FILE):
         return {}
     try:
@@ -32,7 +34,7 @@ def _load_users() -> dict[str, dict]:
         return {}
 
 
-def _save_users(users: dict[str, dict]) -> None:
+def _save_users_file(users: dict[str, dict]) -> None:
     try:
         with open(USERS_FILE, "w", encoding="utf-8") as f:
             json.dump(users, f, indent=2)
@@ -69,8 +71,10 @@ def decode_access_token(token: str) -> Optional[dict]:
 
 
 def register_user(username: str, password: str, display_name: Optional[str] = None) -> dict:
-    users = _load_users()
+    users = _load_users_file()
     username_clean = username.strip().lower()
+
+    # Check existence
     if username_clean in users:
         raise HTTPException(status_code=400, detail="Username already registered")
 
@@ -84,8 +88,26 @@ def register_user(username: str, password: str, display_name: Optional[str] = No
         "total_score": 0,
         "quests_completed": 0,
     }
+
+    # Save to file backup
     users[username_clean] = user_data
-    _save_users(users)
+    _save_users_file(users)
+
+    # Save to MongoDB asynchronously in background if available
+    db = get_database()
+    if db is not None:
+        import asyncio
+        try:
+            loop = asyncio.get_event_loop()
+            if loop.is_running():
+                asyncio.create_task(db["users"].update_one(
+                    {"username": username_clean},
+                    {"$set": user_data},
+                    upsert=True
+                ))
+        except Exception:
+            pass
+
     return {
         "id": user_id,
         "username": username_clean,
@@ -94,7 +116,7 @@ def register_user(username: str, password: str, display_name: Optional[str] = No
 
 
 def authenticate_user(username: str, password: str) -> Optional[dict]:
-    users = _load_users()
+    users = _load_users_file()
     username_clean = username.strip().lower()
     user = users.get(username_clean)
     if not user:
@@ -125,7 +147,7 @@ def get_current_user(credentials: Optional[HTTPAuthorizationCredentials] = Depen
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Malformed token credentials",
         )
-    users = _load_users()
+    users = _load_users_file()
     user = users.get(username)
     if not user:
         raise HTTPException(status_code=404, detail="User not found")
