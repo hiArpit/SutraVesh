@@ -5,10 +5,9 @@ import confetti from 'canvas-confetti'
 import { createSession, submitHop, submitImageHop } from '../api/client'
 import type { PlayMode, HopVerdict, EurekaGraph, GameNode, GameEdge } from '../types/game'
 
-// Auto-layout: place new nodes in a spiral around the canvas
 function nextPosition(index: number) {
   const angle = index * 0.8
-  const radius = 120 + index * 50
+  const radius = 130 + index * 55
   return {
     x: 400 + radius * Math.cos(angle),
     y: 300 + radius * Math.sin(angle),
@@ -35,7 +34,7 @@ function toFlowEdge(gEdge: GameEdge): Edge {
     resonance:    '#fb923c',
   }
   return {
-    id: `${gEdge.source}-${gEdge.target}`,
+    id: `${gEdge.source}-${gEdge.target}-${Date.now()}`,
     source: gEdge.source,
     target: gEdge.target,
     label: gEdge.relationship.slice(0, 30),
@@ -63,7 +62,6 @@ export function useGameSession() {
   const [completed, setCompleted] = useState(false)
   const [eurekaGraph, setEurekaGraph] = useState<EurekaGraph | null>(null)
 
-  // ── Start a new session ─────────────────────────────────────────────────────
   const startSession = useCallback(async (
     m: PlayMode, seed: string, target?: string
   ) => {
@@ -75,7 +73,6 @@ export function useGameSession() {
       setQuestTarget(target)
       setCurrentNode(seed.toLowerCase().replace(/ /g, '_'))
 
-      // Add seed node to canvas
       const seedNode: Node = {
         id: seed.toLowerCase().replace(/ /g, '_'),
         type: 'bubble',
@@ -95,7 +92,6 @@ export function useGameSession() {
     }
   }, [setNodes, setEdges])
 
-  // ── Process hop response ────────────────────────────────────────────────────
   const applyHopResponse = useCallback((res: Awaited<ReturnType<typeof submitHop>>) => {
     setLastVerdict(res.verdict)
     setLastReason(res.reason)
@@ -120,33 +116,46 @@ export function useGameSession() {
     if (res.completed && res.eureka_graph) {
       setCompleted(true)
       setEurekaGraph(res.eureka_graph)
-      confetti({ particleCount: 180, spread: 80, origin: { y: 0.5 }, colors: ['#a78bfa','#22d3ee','#fbbf24'] })
+      confetti({ particleCount: 200, spread: 90, origin: { y: 0.5 }, colors: ['#a78bfa','#22d3ee','#fbbf24', '#10b981'] })
     }
   }, [nodes.length, setNodes, setEdges])
 
-  // ── Text hop ────────────────────────────────────────────────────────────────
-  const handleTextHop = useCallback(async (explanation: string) => {
+  // ── Text hop: concept + explanation ─────────────────────────────────────────
+  const handleTextHop = useCallback(async (concept: string, explanation: string) => {
     if (!sessionId) return
     setLoading(true)
     try {
-      const res = await submitHop(sessionId, mode, explanation, currentNode, questTarget?.toLowerCase().replace(/ /g,'_'))
+      const res = await submitHop(
+        sessionId,
+        mode,
+        explanation,
+        currentNode,
+        concept.toLowerCase().replace(/ /g, '_')
+      )
       applyHopResponse(res)
     } finally {
       setLoading(false)
     }
-  }, [sessionId, mode, currentNode, questTarget, applyHopResponse])
+  }, [sessionId, mode, currentNode, applyHopResponse])
 
   // ── Image hop ────────────────────────────────────────────────────────────────
   const handleImageHop = useCallback(async (explanation: string, file: File) => {
     if (!sessionId) return
     setLoading(true)
     try {
-      const res = await submitImageHop(sessionId, mode, explanation, file, currentNode)
+      const res = await submitImageHop(
+        sessionId,
+        mode,
+        explanation,
+        file,
+        currentNode,
+        questTarget?.toLowerCase().replace(/ /g, '_')
+      )
       applyHopResponse(res)
     } finally {
       setLoading(false)
     }
-  }, [sessionId, mode, currentNode, applyHopResponse])
+  }, [sessionId, mode, currentNode, questTarget, applyHopResponse])
 
   const reset = useCallback(() => {
     setSessionId(null)
