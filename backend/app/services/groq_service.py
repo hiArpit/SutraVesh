@@ -64,7 +64,8 @@ async def identify_concept_from_image(image_bytes: bytes, mime_type: str = "imag
                     ],
                 }
             ],
-            max_tokens=240,
+            response_format={"type": "json_object"},
+            max_tokens=300,
             temperature=0.1,
         )
 
@@ -88,7 +89,8 @@ async def identify_concept_from_image(image_bytes: bytes, mime_type: str = "imag
             "confidence": confidence if confidence in ("high", "medium", "low") else "medium",
             "fallback": False,
         }
-    except Exception:
+    except Exception as e:
+        print(f"Groq Vision Error: {e}")
         return _vision_offline_fallback()
 
 
