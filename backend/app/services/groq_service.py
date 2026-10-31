@@ -7,13 +7,14 @@ Stage 1 — Vision (llama-3.2-11b-vision-preview):
   Takes a base64 image → returns a detected concept label
 
 Stage 2 — Reasoning (llama-3.3-70b-versatile):
-  Takes (source_concept, target_concept, kid's explanation)
-  → returns verdict: 'established' | 'association' | 'rejected'
-  → returns a kid-friendly reason
-  → returns up to 3 resonance bridge concepts (World Mode)
+  1. Fetches Wikipedia summaries for BOTH source and target concepts
+  2. Passes that real-world evidence as grounding context to Groq
+  3. Returns verdict: 'established' | 'association' | 'rejected'
+     + a kid-friendly reason
+     + up to 3 resonance bridge concepts (World Mode)
 
 Offline fallback:
-  If GROQ_API_KEY is missing or API call fails, returns a
+  If GROQ_API_KEY is missing or any call fails, returns a
   deterministic offline result so the demo never crashes.
 """
 
@@ -23,6 +24,8 @@ import json
 from typing import Optional
 from app.core.config import settings
 from app.core.guardrails import sanitize_label
+from app.services.wiki_service import fetch_wiki_summary
+
 
 # ---------------------------------------------------------------------------
 # Lazy Groq client — only created when API key is present
@@ -87,7 +90,6 @@ async def identify_concept_from_image(image_bytes: bytes, mime_type: str = "imag
 
         raw = completion.choices[0].message.content.strip()
         data = _parse_json_safe(raw)
-
         concept = sanitize_label(data.get("concept", "unknown object"))
         confidence = data.get("confidence", "medium")
 
@@ -102,7 +104,7 @@ async def identify_concept_from_image(image_bytes: bytes, mime_type: str = "imag
 
 
 # ---------------------------------------------------------------------------
-# STAGE 2: Reasoning — evaluate hop validity
+# STAGE 2: Reasoning — evaluate hop with Wikipedia grounding
 # ---------------------------------------------------------------------------
 async def evaluate_hop(
     source: str,
@@ -111,46 +113,84 @@ async def evaluate_hop(
     mode: str = "quest",
 ) -> dict:
     """
-    Ask Groq reasoning model to evaluate a kid's connection hop.
+    Evaluate a kid's connection hop using Wikipedia evidence + Groq reasoning.
+
+    Pipeline:
+      1. Fetch Wikipedia summaries for source AND target (real-world grounding)
+      2. Build a context-rich prompt embedding those summaries
+      3. Ask Groq to judge the kid's explanation AGAINST that evidence
+      4. Return verdict, reason, resonance bridges, and the evidence urls used
 
     Returns:
-        verdict         : 'established' | 'association' | 'rejected'
-        reason          : str  - kid-friendly explanation
-        resonance_bridges: list[str] - up to 3 bridging concepts (World Mode)
-        fallback        : bool
+        verdict          : 'established' | 'association' | 'rejected'
+        reason           : str  — kid-friendly one-sentence explanation
+        resonance_bridges: list[str] — up to 3 bridging concepts (World Mode)
+        evidence_urls    : list[str] — Wikipedia URLs used as grounding context
+        fallback         : bool — True if offline mode was used
     """
     client = _get_client()
+
+    # --- Step 1: Fetch Wikipedia evidence for both concepts (always runs) ---
+    source_wiki, target_wiki = await _fetch_evidence_pair(source, target)
+
+    evidence_urls = [
+        u for u in [source_wiki.get("url"), target_wiki.get("url")] if u
+    ]
+
     if not client:
-        return _reasoning_offline_fallback(source, target)
+        return _reasoning_offline_fallback(source, target, evidence_urls)
+
+    # --- Step 2: Build grounded prompt with Wikipedia context ---
+    source_context = (
+        f'Wikipedia says about "{source_wiki["title"]}":\n'
+        f'"{source_wiki["summary"]}"'
+        if source_wiki["found"]
+        else f'(No Wikipedia article found for "{source}")'
+    )
+
+    target_context = (
+        f'Wikipedia says about "{target_wiki["title"]}":\n'
+        f'"{target_wiki["summary"]}"'
+        if target_wiki["found"]
+        else f'(No Wikipedia article found for "{target}")'
+    )
 
     world_instruction = (
         "Also suggest up to 3 'resonance bridge' concepts that connect "
-        f"'{source}' and '{target}' in unexpected but valid ways. "
+        f'"{source}" and "{target}" in unexpected but valid ways. '
         'Add them as "resonance_bridges": ["concept1", "concept2", "concept3"].'
-        if mode == "world" else ""
+        if mode == "world"
+        else ""
     )
 
     prompt = f"""You are an educational AI evaluating a connection made by a child (age 6-12)
-in a science discovery game.
+in a science discovery game called WonderLens.
+
+--- REAL-WORLD EVIDENCE (from Wikipedia) ---
+{source_context}
+
+{target_context}
+--------------------------------------------
 
 The child is connecting: "{source}" → "{target}"
 Their explanation: "{explanation}"
 
-Evaluate strictly but kindly. Respond ONLY with a JSON object:
+Using the Wikipedia evidence above as your primary grounding, evaluate the child's claim.
+Respond ONLY with a JSON object:
 {{
   "verdict": "<established|association|rejected>",
-  "reason": "<one friendly sentence, max 20 words, encouraging tone>",
+  "reason": "<one encouraging sentence, max 20 words, suitable for a child>",
   "resonance_bridges": []
 }}
 
-Rules:
-- "established": scientifically proven direct link (e.g. sun → photosynthesis)
-- "association": plausible creative link (e.g. volcano → pizza because heat)  
-- "rejected": completely unrelated or nonsensical
+Verdict rules (apply strictly against the Wikipedia evidence):
+- "established": the Wikipedia evidence directly supports a factual scientific link
+- "association": a plausible creative or indirect link not contradicted by evidence
+- "rejected": completely unrelated, contradicted by evidence, or nonsensical
 {world_instruction}"""
 
+    # --- Step 3: Call Groq Reasoning model ---
     try:
-        completion = settings.__class__  # type check guard
         completion = _get_client().chat.completions.create(
             model=settings.GROQ_REASONING_MODEL,
             messages=[{"role": "user", "content": prompt}],
@@ -171,13 +211,27 @@ Rules:
 
         return {
             "verdict": verdict,
-            "reason": data.get("reason", f"Good thinking connecting {source} and {target}!"),
+            "reason": data.get("reason", f"Great thinking connecting {source} and {target}!"),
             "resonance_bridges": [sanitize_label(b) for b in bridges[:3]],
+            "evidence_urls": evidence_urls,
             "fallback": False,
         }
 
     except Exception:
-        return _reasoning_offline_fallback(source, target)
+        return _reasoning_offline_fallback(source, target, evidence_urls)
+
+
+# ---------------------------------------------------------------------------
+# Internal helper: fetch Wikipedia for both source and target concurrently
+# ---------------------------------------------------------------------------
+async def _fetch_evidence_pair(source: str, target: str) -> tuple[dict, dict]:
+    """Fetch Wikipedia summaries for source and target in parallel."""
+    import asyncio
+    source_wiki, target_wiki = await asyncio.gather(
+        fetch_wiki_summary(source),
+        fetch_wiki_summary(target),
+    )
+    return source_wiki, target_wiki
 
 
 # ---------------------------------------------------------------------------
@@ -191,11 +245,12 @@ def _vision_offline_fallback() -> dict:
     }
 
 
-def _reasoning_offline_fallback(source: str, target: str) -> dict:
+def _reasoning_offline_fallback(source: str, target: str, evidence_urls: list = None) -> dict:
     return {
         "verdict": "association",
         "reason": f"Creative connection between {source} and {target}! Keep exploring.",
         "resonance_bridges": [],
+        "evidence_urls": evidence_urls or [],
         "fallback": True,
     }
 
@@ -204,12 +259,10 @@ def _reasoning_offline_fallback(source: str, target: str) -> dict:
 # Safe JSON parser — handles Groq wrapping output in markdown code blocks
 # ---------------------------------------------------------------------------
 def _parse_json_safe(raw: str) -> dict:
-    # Strip markdown code fences if present
     cleaned = re.sub(r"```(?:json)?", "", raw).strip().rstrip("```").strip()
     try:
         return json.loads(cleaned)
     except json.JSONDecodeError:
-        # Last resort: extract with regex
         match = re.search(r"\{.*\}", cleaned, re.DOTALL)
         if match:
             try:
