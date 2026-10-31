@@ -18,13 +18,16 @@ class Settings(BaseSettings):
     
     # Groq API settings
     GROQ_API_KEY: Optional[str] = None
-    GROQ_VISION_MODEL: str = "llama-3.2-11b-vision-preview"
+    GROQ_VISION_MODEL: str = "qwen/qwen3.8-27b"
     GROQ_REASONING_MODEL: str = "openai/gpt-oss-120b"
     
     # Wikipedia API
     WIKIPEDIA_USER_AGENT: str = "SutraVeshHackathon/1.0 (contact: team@sutravesh.local)"
 
-    model_config = SettingsConfigDict(env_file=".env", extra="allow")
+    model_config = SettingsConfigDict(
+        env_file=["backend/.env", ".env"],
+        extra="allow"
+    )
 
 
 settings = Settings()
