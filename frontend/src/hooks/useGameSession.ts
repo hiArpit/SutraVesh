@@ -205,13 +205,16 @@ export function useGameSession(currentUser?: UserProfile | null) {
     setNodes(updatedNodes)
     setEdges(updatedEdges)
 
-    // Persist directly to MongoDB for authenticated user
-    const nodesKey = getMapNodesKey(currentUser)
-    const edgesKey = getMapEdgesKey(currentUser)
-    localStorage.setItem(nodesKey, JSON.stringify(updatedNodes))
-    localStorage.setItem(edgesKey, JSON.stringify(updatedEdges))
-    if (currentUser) {
-      await saveUserMapApi(updatedNodes, updatedEdges)
+    // Strict separation: Persist to user's Discovery Map ONLY in World Mode (captured objects)
+    // Quest Ladder levels (mode === 'quest') must NEVER overwrite or contaminate the Discovery Map!
+    if (mode === 'world') {
+      const nodesKey = getMapNodesKey(currentUser)
+      const edgesKey = getMapEdgesKey(currentUser)
+      localStorage.setItem(nodesKey, JSON.stringify(updatedNodes))
+      localStorage.setItem(edgesKey, JSON.stringify(updatedEdges))
+      if (currentUser) {
+        await saveUserMapApi(updatedNodes, updatedEdges)
+      }
     }
 
     // Quest Level completion and lock progression

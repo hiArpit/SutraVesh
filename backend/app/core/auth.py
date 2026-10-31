@@ -338,7 +338,11 @@ async def save_user_discovery(username: str, node: dict, edges: list, mode: str 
     """
     Saves an object (node) and its respective relationships (edges) directly
     to the user's permanent document in MongoDB.
+    Strict Separation: Discovery Map is reserved SOLELY for captured objects in World Mode!
+    Quest Ladder levels (mode == 'quest') are goal-oriented puzzles and must NEVER write to saved_nodes or saved_edges!
     """
+    if mode != "world":
+        return
     username_clean = username.strip().lower()
     try:
         db = get_database()

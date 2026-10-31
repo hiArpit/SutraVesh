@@ -187,7 +187,9 @@ export default function App() {
                 </span>
               </h1>
               <p className="text-[11px] font-bold text-orange-600 mt-0.5">
-                {questTarget ? '🎯 Trail Quest' : '🌿 Discovery Trail'}
+                {mode === 'quest'
+                  ? (activeLevelNumber ? `🎯 Quest Level ${activeLevelNumber}` : '🎯 Quest Challenge')
+                  : '🗺️ Personal Discovery Map'}
               </p>
             </div>
           </div>
