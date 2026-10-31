@@ -225,3 +225,49 @@ def require_user(user: Optional[dict] = Depends(get_current_user)) -> dict:
             headers={"WWW-Authenticate": "Bearer"},
         )
     return user
+
+
+def get_user_map(username: str) -> dict:
+    users = _load_users_file()
+    username_clean = username.strip().lower()
+    user = users.get(username_clean)
+    if not user:
+        raise HTTPException(status_code=404, detail="User not found")
+    return {
+        "nodes": user.get("saved_nodes", []),
+        "edges": user.get("saved_edges", []),
+    }
+
+
+def save_user_map(username: str, nodes: list, edges: list) -> dict:
+    users = _load_users_file()
+    username_clean = username.strip().lower()
+    user = users.get(username_clean)
+    if not user:
+        raise HTTPException(status_code=404, detail="User not found")
+
+    user["saved_nodes"] = nodes
+    user["saved_edges"] = edges
+    users[username_clean] = user
+    _save_users_file(users)
+
+    if is_mongo_available():
+        db = get_database()
+        if db is not None:
+            import asyncio
+            try:
+                loop = asyncio.get_running_loop()
+                loop.create_task(db["users"].update_one(
+                    {"username": username_clean},
+                    {"$set": {
+                        "saved_nodes": nodes,
+                        "saved_edges": edges,
+                    }}
+                ))
+            except Exception:
+                pass
+
+    return {
+        "nodes": user["saved_nodes"],
+        "edges": user["saved_edges"],
+    }
