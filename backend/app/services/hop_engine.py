@@ -97,7 +97,7 @@ async def process_hop(
         detected_object = sanitize_label(raw_label)
 
     # Determine the concept being connected
-    new_concept = detected_object or request.explanation.strip()
+    new_concept = detected_object or request.target_node_id or request.explanation.strip()
     source_concept = request.source_node_id or session.current_node_id
 
     # ------------------------------------------------------------------

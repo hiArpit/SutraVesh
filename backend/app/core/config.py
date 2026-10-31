@@ -10,7 +10,7 @@ class Settings(BaseSettings):
     # Groq API settings
     GROQ_API_KEY: Optional[str] = None
     GROQ_VISION_MODEL: str = "llama-3.2-11b-vision-preview"
-    GROQ_REASONING_MODEL: str = "llama-3.3-70b-versatile"
+    GROQ_REASONING_MODEL: str = "openai/gpt-oss-120b"
     
     # Wikipedia API
     WIKIPEDIA_USER_AGENT: str = "WonderLensHackathon/1.0 (contact: team@sutravesh.local)"
