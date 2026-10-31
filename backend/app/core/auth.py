@@ -2,20 +2,21 @@
 Authentication & JWT Security Utilities
 =======================================
 Password hashing with bcrypt & Token generation with PyJWT.
-Supports live MongoDB storage with automatic local fallback.
+Primary storage is local MongoDB (database: sutravesh, collection: users),
+with local users.json as automatic fault-tolerant backup.
 """
 
 import os
 import json
 import uuid
 from datetime import datetime, timedelta, timezone
-from typing import Optional
+from typing import Optional, List, Dict, Any
 import jwt
 import bcrypt
 from fastapi import Depends, HTTPException, status
 from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 from app.core.config import settings
-from app.core.db import get_database, is_mongo_available
+from app.core.db import get_database
 
 DATA_DIR = os.path.join(os.path.dirname(os.path.dirname(__file__)), "data")
 USERS_FILE = os.path.join(DATA_DIR, "users.json")
@@ -70,11 +71,23 @@ def decode_access_token(token: str) -> Optional[dict]:
         return None
 
 
-def register_user(username: str, password: str, display_name: Optional[str] = None) -> dict:
-    users = _load_users_file()
+async def register_user(username: str, password: str, display_name: Optional[str] = None) -> dict:
     username_clean = username.strip().lower()
 
-    # Check existence
+    # 1. Check MongoDB first
+    try:
+        db = get_database()
+        if db is not None:
+            existing = await db.users.find_one({"username": username_clean})
+            if existing:
+                raise HTTPException(status_code=400, detail="Username already registered")
+    except HTTPException:
+        raise
+    except Exception:
+        pass
+
+    # 2. Check local file backup
+    users = _load_users_file()
     if username_clean in users:
         raise HTTPException(status_code=400, detail="Username already registered")
 
@@ -88,26 +101,26 @@ def register_user(username: str, password: str, display_name: Optional[str] = No
         "total_score": 0,
         "quests_completed": 0,
         "max_level": 1,
+        "saved_nodes": [],
+        "saved_edges": [],
+        "captured_objects": [],
     }
 
-    # Save to file backup
-    users[username_clean] = user_data
-    _save_users_file(users)
-
-    # Save to MongoDB asynchronously in background if available
-    if is_mongo_available():
+    # Save to MongoDB
+    try:
         db = get_database()
         if db is not None:
-            import asyncio
-            try:
-                loop = asyncio.get_running_loop()
-                loop.create_task(db["users"].update_one(
-                    {"username": username_clean},
-                    {"$set": user_data},
-                    upsert=True
-                ))
-            except Exception:
-                pass
+            await db.users.update_one(
+                {"username": username_clean},
+                {"$set": user_data},
+                upsert=True
+            )
+    except Exception:
+        pass
+
+    # Save to backup file
+    users[username_clean] = user_data
+    _save_users_file(users)
 
     return {
         "id": user_id,
@@ -119,25 +132,40 @@ def register_user(username: str, password: str, display_name: Optional[str] = No
     }
 
 
-def authenticate_user(username: str, password: str) -> Optional[dict]:
-    users = _load_users_file()
+async def authenticate_user(username: str, password: str) -> Optional[dict]:
     username_clean = username.strip().lower()
-    user = users.get(username_clean)
-    if not user:
+    user_doc = None
+
+    # Check MongoDB first
+    try:
+        db = get_database()
+        if db is not None:
+            user_doc = await db.users.find_one({"username": username_clean})
+    except Exception:
+        pass
+
+    # Fallback to local file if not found in MongoDB
+    if not user_doc:
+        users = _load_users_file()
+        user_doc = users.get(username_clean)
+
+    if not user_doc:
         return None
-    if not verify_password(password, user["password_hash"]):
+
+    if not verify_password(password, user_doc["password_hash"]):
         return None
+
     return {
-        "id": user["id"],
-        "username": user["username"],
-        "display_name": user["display_name"],
-        "total_score": user.get("total_score", 0),
-        "quests_completed": user.get("quests_completed", 0),
-        "max_level": user.get("max_level", 1),
+        "id": user_doc["id"],
+        "username": user_doc["username"],
+        "display_name": user_doc["display_name"],
+        "total_score": user_doc.get("total_score", 0),
+        "quests_completed": user_doc.get("quests_completed", 0),
+        "max_level": user_doc.get("max_level", 1),
     }
 
 
-def get_current_user(credentials: Optional[HTTPAuthorizationCredentials] = Depends(security)) -> Optional[dict]:
+async def get_current_user(credentials: Optional[HTTPAuthorizationCredentials] = Depends(security)) -> Optional[dict]:
     if not credentials:
         return None
     token = credentials.credentials
@@ -154,66 +182,31 @@ def get_current_user(credentials: Optional[HTTPAuthorizationCredentials] = Depen
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Malformed token credentials",
         )
-    users = _load_users_file()
-    user = users.get(username)
-    if not user:
-        raise HTTPException(status_code=404, detail="User not found")
-    return {
-        "id": user["id"],
-        "username": user["username"],
-        "display_name": user["display_name"],
-        "total_score": user.get("total_score", 0),
-        "quests_completed": user.get("quests_completed", 0),
-        "max_level": user.get("max_level", 1),
-    }
-
-
-def update_user_progress(
-    username: str,
-    total_score: Optional[int] = None,
-    quests_completed: Optional[int] = None,
-    max_level: Optional[int] = None,
-) -> dict:
-    users = _load_users_file()
     username_clean = username.strip().lower()
-    user = users.get(username_clean)
-    if not user:
-        raise HTTPException(status_code=404, detail="User not found")
 
-    if total_score is not None:
-        user["total_score"] = max(user.get("total_score", 0), int(total_score))
-    if quests_completed is not None:
-        user["quests_completed"] = max(user.get("quests_completed", 0), int(quests_completed))
-    if max_level is not None:
-        user["max_level"] = max(user.get("max_level", 1), int(max_level))
-
-    users[username_clean] = user
-    _save_users_file(users)
-
-    if is_mongo_available():
+    # Query MongoDB first
+    user_doc = None
+    try:
         db = get_database()
         if db is not None:
-            import asyncio
-            try:
-                loop = asyncio.get_running_loop()
-                loop.create_task(db["users"].update_one(
-                    {"username": username_clean},
-                    {"$set": {
-                        "total_score": user.get("total_score", 0),
-                        "quests_completed": user.get("quests_completed", 0),
-                        "max_level": user.get("max_level", 1),
-                    }}
-                ))
-            except Exception:
-                pass
+            user_doc = await db.users.find_one({"username": username_clean})
+    except Exception:
+        pass
+
+    if not user_doc:
+        users = _load_users_file()
+        user_doc = users.get(username_clean)
+
+    if not user_doc:
+        raise HTTPException(status_code=404, detail="User not found")
 
     return {
-        "id": user["id"],
-        "username": user["username"],
-        "display_name": user["display_name"],
-        "total_score": user.get("total_score", 0),
-        "quests_completed": user.get("quests_completed", 0),
-        "max_level": user.get("max_level", 1),
+        "id": user_doc["id"],
+        "username": user_doc["username"],
+        "display_name": user_doc["display_name"],
+        "total_score": user_doc.get("total_score", 0),
+        "quests_completed": user_doc.get("quests_completed", 0),
+        "max_level": user_doc.get("max_level", 1),
     }
 
 
@@ -227,47 +220,127 @@ def require_user(user: Optional[dict] = Depends(get_current_user)) -> dict:
     return user
 
 
-def get_user_map(username: str) -> dict:
-    users = _load_users_file()
+async def update_user_progress(
+    username: str,
+    total_score: Optional[int] = None,
+    quests_completed: Optional[int] = None,
+    max_level: Optional[int] = None,
+) -> dict:
     username_clean = username.strip().lower()
+    update_data: Dict[str, Any] = {}
+    if total_score is not None:
+        update_data["total_score"] = int(total_score)
+    if quests_completed is not None:
+        update_data["quests_completed"] = int(quests_completed)
+    if max_level is not None:
+        update_data["max_level"] = int(max_level)
+
+    # Update MongoDB directly
+    user_doc = None
+    try:
+        db = get_database()
+        if db is not None:
+            if update_data:
+                await db.users.update_one(
+                    {"username": username_clean},
+                    {"$max": update_data}
+                )
+            user_doc = await db.users.find_one({"username": username_clean})
+    except Exception:
+        pass
+
+    # Update local file backup
+    users = _load_users_file()
+    user = users.get(username_clean, {})
+    if total_score is not None:
+        user["total_score"] = max(user.get("total_score", 0), int(total_score))
+    if quests_completed is not None:
+        user["quests_completed"] = max(user.get("quests_completed", 0), int(quests_completed))
+    if max_level is not None:
+        user["max_level"] = max(user.get("max_level", 1), int(max_level))
+    users[username_clean] = user
+    _save_users_file(users)
+
+    final_score = user_doc.get("total_score", user.get("total_score", 0)) if user_doc else user.get("total_score", 0)
+    final_quests = user_doc.get("quests_completed", user.get("quests_completed", 0)) if user_doc else user.get("quests_completed", 0)
+    final_level = user_doc.get("max_level", user.get("max_level", 1)) if user_doc else user.get("max_level", 1)
+
+    return {
+        "username": username_clean,
+        "total_score": final_score,
+        "quests_completed": final_quests,
+        "max_level": final_level,
+    }
+
+
+async def get_user_map(username: str) -> dict:
+    username_clean = username.strip().lower()
+
+    # 1. Query MongoDB first
+    try:
+        db = get_database()
+        if db is not None:
+            doc = await db.users.find_one({"username": username_clean})
+            if doc:
+                return {
+                    "nodes": doc.get("saved_nodes", []),
+                    "edges": doc.get("saved_edges", []),
+                    "captured_objects": doc.get("captured_objects", []),
+                }
+    except Exception:
+        pass
+
+    # 2. Fallback to users.json
+    users = _load_users_file()
     user = users.get(username_clean)
     if not user:
         raise HTTPException(status_code=404, detail="User not found")
     return {
         "nodes": user.get("saved_nodes", []),
         "edges": user.get("saved_edges", []),
+        "captured_objects": user.get("captured_objects", []),
     }
 
 
-def save_user_map(username: str, nodes: list, edges: list) -> dict:
-    users = _load_users_file()
+async def save_user_map(username: str, nodes: list, edges: list) -> dict:
     username_clean = username.strip().lower()
-    user = users.get(username_clean)
-    if not user:
-        raise HTTPException(status_code=404, detail="User not found")
 
-    user["saved_nodes"] = nodes
-    user["saved_edges"] = edges
-    users[username_clean] = user
-    _save_users_file(users)
-
-    if is_mongo_available():
+    # 1. Persist directly to MongoDB
+    try:
         db = get_database()
         if db is not None:
-            import asyncio
-            try:
-                loop = asyncio.get_running_loop()
-                loop.create_task(db["users"].update_one(
-                    {"username": username_clean},
-                    {"$set": {
-                        "saved_nodes": nodes,
-                        "saved_edges": edges,
-                    }}
-                ))
-            except Exception:
-                pass
+            await db.users.update_one(
+                {"username": username_clean},
+                {"$set": {
+                    "saved_nodes": nodes,
+                    "saved_edges": edges,
+                }},
+                upsert=True
+            )
+    except Exception:
+        pass
+
+    # 2. Persist to backup users.json
+    users = _load_users_file()
+    if username_clean in users:
+        users[username_clean]["saved_nodes"] = nodes
+        users[username_clean]["saved_edges"] = edges
+        _save_users_file(users)
 
     return {
-        "nodes": user["saved_nodes"],
-        "edges": user["saved_edges"],
+        "nodes": nodes,
+        "edges": edges,
     }
+
+
+async def record_user_discovery(username: str, discovery_item: dict) -> None:
+    username_clean = username.strip().lower()
+    try:
+        db = get_database()
+        if db is not None:
+            await db.users.update_one(
+                {"username": username_clean},
+                {"$push": {"captured_objects": discovery_item}}
+            )
+    except Exception:
+        pass
