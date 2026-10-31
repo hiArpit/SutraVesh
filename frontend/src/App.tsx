@@ -1,4 +1,4 @@
-import { ReactFlow, Background, Controls, MiniMap, BackgroundVariant } from '@xyflow/react'
+import { ReactFlow, Background, Controls, MiniMap, BackgroundVariant, useReactFlow } from '@xyflow/react'
 import '@xyflow/react/dist/style.css'
 import { AnimatePresence } from 'framer-motion'
 import { useState, useEffect } from 'react'
@@ -15,6 +15,20 @@ import { getMeApi, logoutApi } from './api/client'
 import type { UserProfile } from './types/game'
 
 const NODE_TYPES = { bubble: BubbleNode }
+
+function AutoFitView({ nodeCount }: { nodeCount: number }) {
+  const { fitView } = useReactFlow()
+  useEffect(() => {
+    if (nodeCount > 0) {
+      const timer = setTimeout(() => {
+        fitView({ padding: 0.35, duration: 600, maxZoom: 1.15 })
+      }, 80)
+      return () => clearTimeout(timer)
+    }
+  }, [nodeCount, fitView])
+  return null
+}
+
 
 export default function App() {
   const [currentUser, setCurrentUser] = useState<UserProfile | null>(null)
@@ -88,6 +102,7 @@ export default function App() {
             nodeColor="#F97316"
             maskColor="rgba(250,246,238,0.7)"
           />
+          <AutoFitView nodeCount={nodes.length} />
         </ReactFlow>
 
         {/* Bottom: Hop input bar */}
@@ -120,10 +135,15 @@ export default function App() {
             </div>
           </div>
           <button
-            onClick={reset}
+            onClick={() => {
+              if (nodes.length <= 1 || window.confirm('Exit current discovery trail and start a new exploration?')) {
+                reset()
+              }
+            }}
             className="px-2.5 py-1 bg-slate-100 hover:bg-rose-50 text-slate-500 hover:text-rose-600 rounded-xl text-xs font-bold transition-all cursor-pointer"
+            title="Start new trail"
           >
-            ✕ Exit
+            ✕ New Trail
           </button>
         </div>
 

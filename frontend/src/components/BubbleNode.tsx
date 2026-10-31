@@ -32,7 +32,11 @@ export default memo(function BubbleNode({ data }: NodeProps<BubbleNodeType>) {
         w-28 h-28 rounded-full border-4 ${theme.bg} ${theme.border}
         cursor-pointer select-none shadow-xl ${theme.glow} transition-transform hover:scale-110 group`}
     >
-      <Handle type="target" position={Position.Top} className="opacity-0" />
+      {/* 4-way connection points for natural threads in all directions */}
+      <Handle type="target" position={Position.Top} className="opacity-0 !w-4 !h-4" />
+      <Handle type="source" position={Position.Bottom} className="opacity-0 !w-4 !h-4" />
+      <Handle type="target" position={Position.Left} className="opacity-0 !w-4 !h-4" />
+      <Handle type="source" position={Position.Right} className="opacity-0 !w-4 !h-4" />
 
       <span className="text-2xl mb-0.5 filter drop-shadow">
         {categoryEmoji(data.category)}
@@ -61,8 +65,6 @@ export default memo(function BubbleNode({ data }: NodeProps<BubbleNodeType>) {
           )}
         </div>
       )}
-
-      <Handle type="source" position={Position.Bottom} className="opacity-0" />
     </div>
   )
 })
